@@ -1,7 +1,10 @@
 """Rakit komentar dari bank igexe untuk Auto komen phonefarm.
 
-Masukan (stdin, JSON): {"caption": str, "count": int, "tone": str, "hindari": [str]}
+Masukan (stdin, JSON): {"caption": str, "count": int, "tone": str, "hindari": [str], "konteks": str}
 Keluaran (stdout, JSON): {"suasana": str, "tone": str, "comments": [str]}
+
+"konteks" adalah teks yang terbaca di layar postingan (misalnya judul berita yang
+tercetak di gambar); hanya dipakai untuk mendeteksi suasana, bukan subjek komentar.
 
 Bank dan penilai disalin apa adanya dari igexe. Emoji dimatikan di sini karena
 ADB hanya dapat mengetik huruf Latin, angka, dan simbol.
@@ -27,7 +30,8 @@ def main() -> None:
     count = max(1, min(int(data.get("count") or 1), 100))
     tone = bank._tone(data.get("tone"))
     hindari = [str(t) for t in data.get("hindari") or [] if t][:2000]
-    suasana = bank.deteksi_suasana(caption)
+    konteks = str(data.get("konteks") or "")[:5000]
+    suasana = bank.deteksi_suasana(f"{caption}\n{konteks}" if konteks else caption)
     hasil: list[str] = []
     for _ in range(6):
         for teks in bank.buat_komentar(caption, count - len(hasil), tone, hindari=hindari + hasil, suasana=suasana):

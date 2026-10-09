@@ -93,6 +93,10 @@ app.post('/api/ig/start', (req, res) => {
   try { res.json(instagram.start(req.body)); } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.post('/api/ig/stop', (req, res) => res.json(instagram.stop()));
+app.get('/api/ig/logs', async (req, res) => res.json({ logs: await instagram.listLogs() }));
+app.get('/api/ig/logs/:id', async (req, res) => {
+  try { res.json({ id: req.params.id, text: await instagram.readLog(req.params.id) }); } catch (error) { res.status(404).json({ error: error.message }); }
+});
 app.get('/api/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream'); res.setHeader('Connection', 'keep-alive'); res.flushHeaders();
   subscribers.add(res); res.write(`data: ${JSON.stringify(snapshot())}\n\n`);

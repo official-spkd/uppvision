@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseUi, switcherAccounts, gridPosts, gridTiles, composerAccount, validatePlan, postFingerprint, likeState, threadComments, postCaption } from '../server/instagram-core.mjs';
-import { InstagramManager, BlockedError } from '../server/instagram.mjs';
+import { parseUi, switcherAccounts, gridPosts, gridTiles, composerAccount, validatePlan, postFingerprint, likeState, threadComments, postCaption, commentCount } from '../server/instagram-core.mjs';
+import { InstagramManager, BlockedError, NetworkError } from '../server/instagram.mjs';
+import { JobLogs } from '../server/joblog.mjs';
 
 const id = suffix => `com.instagram.android:id/${suffix}`;
 const deviceAccounts = [{ serial: 'phone1', accounts: [{ username: 'account.one', disabled: false }, { username: 'disabled', disabled: true }] }];
@@ -85,22 +86,25 @@ test('a like is verified when the button switches to its liked state', async () 
   assert.equal(tapped, 1, 'an already liked post is never tapped (that would unlike it)');
 });
 const COMPOSER = id('layout_comment_thread_edittext_multiline'), SEND = id('layout_comment_thread_post_button_icon');
-function fakeRunner({ existing = 0, uncertain = false, stopBeforeSend = false, blockedOn = null, devices = ['phone1', 'phone2'], owners = {} } = {}) {
+function fakeRunner({ existing = 0, uncertain = false, stopBeforeSend = false, blockedOn = null, devices = ['phone1', 'phone2'], owners = {}, complete = true } = {}) {
   const owner = serial => owners[serial] || 'account.one';
   const manager = new InstagramManager({ statePath: '/unused', devices: () => devices.map(serial => ({ serial, status: 'device' })) });
   const drafts = new Map(), submitted = new Map(), sent = [], requests = [];
   manager.save = async () => {}; manager.back = async () => {}; manager.wait = async () => {};
+  manager.readScreen = async () => ''; manager.logs.write = () => {}; manager.logs.create = async () => null;
+  manager.net = { macOnline: async () => true, phoneOnline: async () => true, restoreInternet: async () => ({ online: true }) };
   manager.accountSheet = async () => {};
-  manager.openPost = async (serial, account, target, index) => ({ nodes: [], pinned: 0, fingerprint: `post-${index}` });
+  let current = 0;
+  manager.openPost = async (serial, account, target, index) => { current = index; return { nodes: [], pinned: 0, fingerprint: `post-${index}` }; };
   manager.likePost = async () => 'liked';
-  manager.openThread = async () => ({ caption: 'Banjir melanda Bekasi', mine: Array.from({ length: existing }, (_, i) => `lama ${i}`), others: ['orang lain'] });
+  manager.openThread = async () => ({ caption: 'Banjir melanda Bekasi', loaded: true, complete, mine: [...Array.from({ length: existing }, (_, i) => `lama ${i}`), ...sent.filter(x => x.serial === 'phone1' && x.post === current).map(x => x.text)], others: ['orang lain'] });
   manager.generate = async request => { requests.push(request); return { suasana: 'bencana', tone: request.tone, comments: Array.from({ length: request.count }, (_, i) => `Komentar ${requests.length}-${i}`) }; };
   manager.typeComment = async (serial, text) => { drafts.set(serial, text); if (stopBeforeSend) manager.stopRequested = true; };
   manager.tap = async (serial, node) => {
     if (node['resource-id'] !== SEND) return;
     assert.ok(manager.state.history.at(-1).status === 'sending', 'reserve the attempt before tapping Send');
     if (blockedOn === serial) { submitted.set(serial, 'blocked'); return; }
-    sent.push({ serial, text: drafts.get(serial) }); submitted.set(serial, drafts.get(serial)); drafts.delete(serial);
+    sent.push({ serial, text: drafts.get(serial), post: current }); submitted.set(serial, drafts.get(serial)); drafts.delete(serial);
   };
   manager.ui = async serial => {
     if (submitted.has(serial)) {
@@ -131,12 +135,14 @@ test('one username on two HP shares its per-post count, and other accounts avoid
   assert.equal(fake.sent.length, 2); assert.equal(fake.manager.countFor('account.one:post-0'), 2);
   assert.equal(fake.manager.locks.size, 0);
 });
-test('does not retry an uncertain send, and Stop prevents submission before Send', async () => {
-  const uncertain = fakeRunner({ uncertain: true }), first = jobFor([plan()]);
+test('an uncertain send is not resent until the screen proves it missing, and Stop prevents submission before Send', async () => {
+  const uncertain = fakeRunner({ uncertain: true, complete: false }), first = jobFor([plan()]);
   await uncertain.manager.run(first);
-  assert.equal(uncertain.manager.state.history[0].status, 'uncertain'); assert.equal(first.accounts[0].status, 'failed');
+  assert.equal(uncertain.manager.state.history[0].status, 'uncertain'); assert.equal(first.accounts[0].status, 'done');
+  assert.match(first.accounts[0].note, /dicocokkan ulang/);
   await uncertain.manager.run(jobFor([plan()]));
-  assert.equal(uncertain.sent.length, 1);
+  assert.equal(uncertain.sent.length, 1, 'a partly loaded list never proves a comment missing');
+  assert.equal(uncertain.manager.state.history[0].status, 'sent', 'the earlier text is now visible, so it is reconciled as sent');
   const stopped = fakeRunner({ stopBeforeSend: true }), job = jobFor([plan()]);
   await stopped.manager.run(job);
   assert.equal(stopped.sent.length, 0); assert.equal(job.status, 'stopped');
@@ -173,7 +179,9 @@ test('Stop interrupts a running check and a scan without touching the HP further
   manager.save = async () => {};
   manager.state.devices = [{ serial: 'phone1', accounts: [{ username: 'account.one' }, { username: 'account.two' }] }, { serial: 'phone2', accounts: [{ username: 'account.three' }] }];
   let reads = 0;
-  manager.inspect = async account => { manager.stop(); await manager.ui(account.serial); reads++; return { ok: true }; };
+  manager.net = { macOnline: async () => true, phoneOnline: async () => true, restoreInternet: async () => ({ online: true }) };
+  manager.logs.create = async () => null;
+  manager.inspect = async (job, account) => { manager.stop(); await manager.ui(account.serial); reads++; return { ok: true }; };
   const result = await manager.preview({ accounts: [plan(), plan({ username: 'account.two' }), plan({ serial: 'phone2', username: 'account.three' })] });
   assert.equal(result.stopped, true); assert.equal(reads, 0);
   assert.ok(result.results.every(r => !r.ok)); assert.match(result.results[1].error, /dihentikan/);
@@ -221,4 +229,151 @@ test('a post whose caption is still below the screen edge is nudged up before it
   manager.ui = async () => screens.length > 1 ? screens.shift() : screens[0];
   const post = await manager.openPost('phone1', 'account.one', 'target.one', 2);
   assert.equal(nudges, 1); assert.equal(typeof post.fingerprint, 'string');
+});
+
+test('a slow network retries the step with growing pauses, then the post succeeds', async () => {
+  const fake = fakeRunner(), waits = [];
+  fake.manager.wait = async ms => { waits.push(ms); };
+  const open = fake.manager.openPost; let failures = 2;
+  fake.manager.openPost = async (...args) => { if (failures-- > 0) throw new NetworkError('Grid postingan belum termuat.'); return open(...args); };
+  const job = jobFor([plan()]);
+  await fake.manager.run(job);
+  assert.equal(fake.sent.length, 1); assert.deepEqual(waits.filter(ms => ms === 5000 || ms === 10000), [5000, 10000]);
+  assert.ok(job.logs.some(l => /Coba lagi dalam 5 detik \(1\/4\)/.test(l.message)));
+});
+test('a post that keeps failing is skipped, retried once at the end, and 3 failures in a row pause the account 1 minute', async () => {
+  const fake = fakeRunner(), waits = [];
+  fake.manager.wait = async ms => { waits.push(ms); };
+  const open = fake.manager.openPost, tries = new Map();
+  fake.manager.openPost = async (serial, account, target, index) => {
+    tries.set(index, (tries.get(index) || 0) + 1);
+    if (index < 3 && tries.get(index) <= 5) throw new NetworkError('Postingan belum termuat.');
+    return open(serial, account, target, index);
+  };
+  const job = jobFor([plan({ posts: 4 })]);
+  await fake.manager.run(job);
+  assert.ok(waits.includes(60000), 'three posts in a row failed, so the account paused one minute');
+  assert.deepEqual([...tries.values()], [6, 6, 6, 1], 'posts 1–3 used their 5 tries, then one retry pass each');
+  assert.equal(fake.sent.length, 4); assert.equal(job.accounts[0].missed, 0); assert.equal(job.accounts[0].status, 'done');
+});
+test('when the Mac loses internet every HP pauses, resumes when it returns, and stops after 5 minutes', async () => {
+  const back = fakeRunner(); let checks = 0;
+  back.manager.net.macOnline = async () => ++checks > 3;
+  const open = back.manager.openPost; let fail = true;
+  back.manager.openPost = async (...args) => { if (fail) { fail = false; throw new NetworkError('Profil target belum termuat.'); } return open(...args); };
+  const job = jobFor([plan()]);
+  await back.manager.run(job);
+  assert.ok(job.logs.some(l => /Semua HP dijeda/.test(l.message)) && job.logs.some(l => /Internet kembali/.test(l.message)));
+  assert.equal(back.sent.length, 1); assert.equal(job.paused, false);
+  const down = fakeRunner();
+  down.manager.net.macOnline = async () => false;
+  const stopped = jobFor([plan()]);
+  await down.manager.run(stopped);
+  assert.equal(stopped.status, 'stopped'); assert.match(stopped.stopReason, /5 menit/); assert.equal(down.sent.length, 0);
+});
+test('an HP without internet is reconnected first, and skipped when that fails', async () => {
+  const fake = fakeRunner({ owners: { phone2: 'account.two' } });
+  fake.manager.net.phoneOnline = async serial => serial === 'phone1';
+  fake.manager.net.restoreInternet = async () => ({ online: false });
+  const job = jobFor([plan(), plan({ serial: 'phone2', username: 'account.two' })]);
+  await fake.manager.run(job);
+  assert.equal(job.accounts[0].status, 'done'); assert.equal(job.accounts[1].status, 'failed'); assert.match(job.accounts[1].note, /internet/);
+});
+test('"Memposting…" is awaited, and "Gagal memposting" releases the count so the gap is filled later', async () => {
+  for (const [screens, expected] of [[['posting', 'posting', 'visible'], 'sent'], [['posting', 'failed'], 'failed']]) {
+    const manager = new InstagramManager({ statePath: '/unused', devices: () => [{ serial: 'phone1', status: 'device' }] });
+    manager.save = async () => {}; manager.readScreen = async () => ''; manager.logs.write = () => {};
+    manager.verifiedAccounts.set('phone1', { username: 'account.one', at: Date.now() });
+    manager.net = { macOnline: async () => true, phoneOnline: async () => true, restoreInternet: async () => ({ online: true }) };
+    let typed = '', sent = false;
+    manager.tap = async (serial, node) => { if (node['resource-id'] === SEND) sent = true; };
+    manager.typeComment = async (serial, text) => { typed = text; };
+    manager.ui = async () => {
+      if (!sent) return [{ 'resource-id': COMPOSER, text: typed || 'Tambahkan komentar…' }, ...(typed ? [{ 'resource-id': SEND, enabled: 'true' }] : [])];
+      const next = screens.shift() || 'visible';
+      const base = [{ 'resource-id': COMPOSER, text: 'Tambahkan komentar…' }];
+      if (next === 'posting') return [...base, { text: 'Memposting…' }];
+      if (next === 'failed') return [...base, { text: 'Gagal memposting. Ketuk untuk mencoba lagi.' }];
+      return [...base, { 'content-desc': `account.one mengatakan ${typed}` }];
+    };
+    const entry = { serial: 'phone1', username: 'account.one', target: 'target.one', comments: 2, sent: 0 }, job = { logs: [], sent: 0 };
+    if (expected === 'sent') assert.equal(await manager.sendComment(job, entry, 'k', 'Halo semua'), 'sent');
+    else await assert.rejects(manager.sendComment(job, entry, 'k', 'Halo semua'), NetworkError);
+    assert.equal(manager.state.history[0].status, expected);
+    assert.equal(manager.countFor('k'), expected === 'sent' ? 1 : 0);
+  }
+});
+test('reconciliation: a pending comment found on screen becomes sent; missing from a full list becomes failed', () => {
+  const manager = new InstagramManager({ statePath: '/unused', devices: () => [] });
+  manager.logs.write = () => {};
+  manager.state.history = [{ key: 'k', text: 'Ada di layar', status: 'posting' }, { key: 'k', text: 'Tidak ada', status: 'uncertain' }, { key: 'k', text: 'Sudah', status: 'sent' }];
+  manager.setCount('k', 3);
+  const job = { logs: [] };
+  manager.reconcile(job, {}, 'k', { mine: ['Ada di layar', 'Sudah'], complete: false });
+  assert.deepEqual(manager.state.history.map(r => r.status), ['sent', 'uncertain', 'sent'], 'a partly loaded list proves nothing missing');
+  manager.reconcile(job, {}, 'k', { mine: ['Ada di layar', 'Sudah'], complete: true });
+  assert.equal(manager.state.history[1].status, 'failed'); assert.equal(manager.countFor('k'), 2);
+});
+test('a comment list that has not loaded is skipped instead of guessed, unless a count is already stored', async () => {
+  const fake = fakeRunner();
+  fake.manager.openThread = async () => ({ caption: '', loaded: false, complete: false, mine: [], others: [] });
+  const job = jobFor([plan()]);
+  await fake.manager.run(job);
+  assert.equal(fake.sent.length, 0); assert.equal(job.accounts[0].missed, 1);
+  assert.ok(job.logs.some(l => /supaya tidak mengirim berlebih/.test(l.message)));
+});
+test('process logs are written as text, listed, read back, and deleted after 7 days', async () => {
+  const { mkdtemp, rm, utimes } = await import('node:fs/promises'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'phonefarm-logs-'));
+  const logs = new JobLogs(dir);
+  const created = await logs.create('komen', '1 akun');
+  await logs.write(created.file, '10:00:00  HP 01 @account.one · Terkirim');
+  const list = await logs.list();
+  assert.equal(list.length, 1); assert.equal(list[0].label, 'Auto komen');
+  assert.match(await logs.read(created.id), /Terkirim/);
+  await assert.rejects(logs.read('../instagram'));
+  const old = Date.now() / 1000 - 8 * 86400;
+  await utimes(created.file, old, old); await logs.prune();
+  assert.equal((await logs.list()).length, 0);
+  await rm(dir, { recursive: true });
+});
+
+test('the comment count beside the comment button tells an empty thread from one that has not loaded', () => {
+  const bar = count => [{ 'resource-id': id('row_feed_button_like'), bounds: '[36,1082][108,1220]' }, { text: '9', bounds: '[120,1082][145,1220]' },
+    { 'resource-id': id('row_feed_button_comment'), bounds: '[181,1082][253,1220]' }, ...(count ? [{ text: count, bounds: '[265,1082][290,1220]' }] : []), { text: '1', bounds: '[423,1082][440,1220]' }];
+  assert.equal(commentCount(bar('9')), 9, 'the like count on the left and the repost count further right are ignored');
+  assert.equal(commentCount(bar('1,2 rb')), 1000);
+  assert.equal(commentCount(bar(null)), 0);
+});
+test('an offline HP never sends; a comment shown while the HP is offline is not counted as sent', async () => {
+  const offline = fakeRunner(); let restored = 0;
+  offline.manager.net.phoneOnline = async () => false;
+  offline.manager.net.restoreInternet = async () => { restored++; return { online: false }; };
+  const job = jobFor([plan()]);
+  await offline.manager.run(job);
+  assert.equal(offline.sent.length, 0); assert.equal(job.accounts[0].status, 'failed'); assert.ok(restored >= 1);
+  const flaky = fakeRunner({ complete: false }); let calls = 0;
+  // Online for the start, the post and the pre-send check; offline right after Send.
+  flaky.manager.net.phoneOnline = async () => ++calls <= 3;
+  const second = jobFor([plan()]);
+  await flaky.manager.run(second);
+  assert.equal(flaky.sent.length, 1); assert.equal(flaky.manager.state.history[0].status, 'uncertain');
+  assert.ok(second.logs.some(l => /HP sedang offline/.test(l.message)));
+});
+
+test('posts with identical captions are told apart by grid order, and a fully read list corrects the stored count', async () => {
+  const fake = fakeRunner();
+  const open = fake.manager.openPost;
+  fake.manager.openPost = async (...args) => ({ ...(await open(...args)), fingerprint: 'same-caption' });
+  const job = jobFor([plan({ posts: 2 })]);
+  await fake.manager.run(job);
+  assert.equal(fake.sent.length, 2, 'both posts get their comment');
+  assert.equal(fake.manager.countFor('account.one:same-caption'), 1); assert.equal(fake.manager.countFor('account.one:same-caption#2'), 1);
+  assert.ok(job.logs.some(l => /dibedakan sebagai yang ke-2/.test(l.message)));
+  const stale = fakeRunner();
+  stale.manager.setCount('account.one:post-0', 1);
+  const second = jobFor([plan()]);
+  await stale.manager.run(second);
+  assert.equal(stale.sent.length, 1, 'the stored 1 is not on screen in a complete list, so the comment is sent');
+  assert.ok(second.logs.some(l => /mengikuti layar/.test(l.message)));
 });

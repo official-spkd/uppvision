@@ -40,9 +40,15 @@ Komentar dirakit dari bank komentar lokal (`server/komentar/`) berdasarkan capti
 
 Pengaman: akun aktif diverifikasi sebelum mengirim, draft lama tidak ditimpa, kiriman yang belum pasti tidak diulang, dan akun yang dibatasi Instagram berhenti sendiri tanpa menghentikan HP lain.
 
-Daftar akun, setelan, hitungan, dan riwayat lokal berada di `.phonefarm/instagram.json` dan tidak ikut repo.
+Riwayat: setiap Pindai akun, Cek target, dan Auto komen tercatat sebagai log teks di menu **Riwayat proses** (langkah per HP, hasil bacaan layar, dan keputusan lanjut atau ulang). Log disimpan 7 hari lalu dihapus otomatis.
 
-Catatan: pembacaan caption utuh (mengetuk "selengkapnya" sebelum komentar disusun) sudah ditulis tetapi belum diuji pada HP.
+Pembacaan layar: caption dibaca utuh (mengetuk "selengkapnya"), dan tulisan pada gambar postingan dibaca dengan pengenal teks macOS untuk membantu menentukan suasana. Screenshot yang dipakai langsung dihapus setelah dibaca.
+
+Kepastian kiriman: setiap komentar tercatat dengan status terkirim, memposting, gagal, atau belum pasti. Komentar yang masih memposting atau belum pasti dicocokkan ulang di layar pada proses berikutnya; yang ternyata gagal diisi ulang. Komentar yang terlihat di layar saat HP offline tidak dianggap terkirim. Bila daftar komentar terbaca penuh, hitungan mengikuti layar. Postingan dengan caption yang sama persis dibedakan menurut urutannya di grid.
+
+Internet lambat atau putus: internet HP diperiksa langsung di awal setiap postingan dan sebelum mengirim. Satu langkah dicoba ulang dengan jeda bertambah sampai sekitar 1 menit, lalu postingan dilewati dan dicoba sekali lagi di akhir antrean akun. Tiga postingan berturut-turut terkendala jaringan membuat akun dijeda 1 menit. Bila internet Mac putus, semua HP dijeda dan internet dicek setiap 15 detik; proses berhenti bila 5 menit belum kembali. Koneksi internet HP yang terputus disambungkan ulang otomatis.
+
+Daftar akun, setelan, hitungan, dan riwayat lokal berada di `.phonefarm/instagram.json` dan tidak ikut repo.
 
 ## Rencana aplikasi native Mac
 

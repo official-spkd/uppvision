@@ -154,3 +154,22 @@ export function validatePlan(body, accountDevices) {
 }
 const BLOCKED = /try again later|coba lagi nanti|action blocked|tindakan (?:ini )?diblokir|we restrict certain activity|kami membatasi aktivitas/i;
 export const blockedNotice = nodes => nodes.some(n => BLOCKED.test(`${n.text || ''} ${n['content-desc'] || ''}`));
+const textOf = n => `${n.text || ''} ${n['content-desc'] || ''}`;
+const OFFLINE = /no internet connection|tidak ada koneksi(?: internet)?|couldn'?t refresh feed|tidak dapat memperbarui|couldn'?t load|tidak dapat memuat|gagal memuat|check your (?:internet )?connection|periksa koneksi/i;
+export const offlineNotice = nodes => nodes.some(n => OFFLINE.test(textOf(n)));
+const POSTING = /^(?:posting|memposting|mengirim|sending)\s*(?:\.\.\.|…)?$/i;
+export const postingNotice = nodes => nodes.some(n => POSTING.test((n.text || n['content-desc'] || '').trim()));
+const POST_FAILED = /couldn'?t post|failed to post|gagal (?:memposting|mengirim)|tidak dapat (?:memposting|mengirim)|tap to retry|ketuk untuk mencoba lagi|tidak terkirim/i;
+export const postFailedNotice = nodes => nodes.some(n => POST_FAILED.test(textOf(n)));
+const EMPTY_THREAD = /^(?:belum ada komentar|no comments yet|jadilah yang pertama|be the first)/i;
+export const emptyThread = nodes => nodes.some(n => EMPTY_THREAD.test((n.text || '').trim()));
+// Number printed next to the opened post's comment button. Instagram hides it when there are no comments.
+export function commentCount(nodes) {
+  const b = boundsOf(commentButton(nodes));
+  if (!b) return null;
+  const label = nodes.map(n => ({ text: (n.text || '').trim(), box: boundsOf(n) }))
+    .filter(x => x.box && /^\d[\d.,]*\s*(?:k|rb|jt|m)?$/i.test(x.text) && x.box[1] < b[3] && x.box[3] > b[1] && x.box[0] >= b[2] - 2 && x.box[0] - b[2] < 60)
+    .sort((x, y) => x.box[0] - y.box[0])[0];
+  if (!label) return 0;
+  return /[a-z]/i.test(label.text) ? 1000 : Number(label.text.replace(/[.,]/g, ''));
+}

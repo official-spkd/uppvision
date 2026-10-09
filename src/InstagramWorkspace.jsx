@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Camera as Instagram, MessageCircle, Upload, ArrowRight, ArrowLeft, RefreshCw, Smartphone, Check, Play, Square, Eye, Users, Clock, ListChecks, Heart, AlertTriangle } from 'lucide-react';
+import { Camera as Instagram, MessageCircle, Upload, ArrowRight, ArrowLeft, RefreshCw, Smartphone, Check, Play, Square, Eye, Users, Clock, ListChecks, Heart, AlertTriangle, WifiOff, History, ChevronDown } from 'lucide-react';
 
 const accountKey = a => `${a.serial}:${a.username}`;
 const jobLabel = value => ({ running: 'Berjalan', stopping: 'Menghentikan…', stopped: 'Dihentikan', completed: 'Selesai', completed_with_errors: 'Selesai dengan kendala', failed: 'Gagal' })[value] || 'Belum berjalan';
-const accountLabel = value => ({ waiting: 'Menunggu giliran', running: 'Berjalan', done: 'Selesai', stopped: 'Dihentikan', blocked: 'Dibatasi Instagram', failed: 'Terkendala' })[value] || value;
+const accountLabel = value => ({ waiting: 'Menunggu giliran', running: 'Berjalan', paused: 'Dijeda 1 menit', done: 'Selesai', stopped: 'Dihentikan', blocked: 'Dibatasi Instagram', network: 'Terkendala jaringan', failed: 'Terkendala' })[value] || value;
 const TONES = [['positif', 'Positif'], ['netral', 'Netral'], ['negatif', 'Negatif']];
 const DEFAULTS = { target: '', posts: 3, comments: 3, tone: 'positif' };
 const likeLabel = value => ({ already: 'sudah disukai', not_liked: 'belum disukai', missing: 'tombol like tidak terlihat', unknown: 'status like belum terbaca' })[value] || value;
@@ -106,10 +106,33 @@ export default function InstagramWorkspace({ api, active, bridgeOnline, devices,
       </div>
     </form></div>
     <section className="settings-card ig-progress"><div className="ig-section-heading"><div><h2>Aktivitas Auto komen</h2><p>{state.job ? `${jobLabel(state.job.status)} · ${state.job.sent} terkirim · ${state.job.skipped} postingan dilewati · ${state.job.failed} akun terkendala` : 'Proses akan tampil di sini setelah dijalankan.'}</p></div>{running && <StopButton label="Hentikan semua" />}</div>
+      {state.job?.paused && <div className="ig-paused" role="status"><WifiOff size={16} /><span>Internet Mac terputus. Semua HP dijeda dan dicek setiap 15 detik; proses berhenti bila 5 menit belum kembali.</span></div>}
+      {state.job?.stopReason && !running && <p className="ig-error"><AlertTriangle size={14} /> {state.job.stopReason}</p>}
       {state.job && <div className="ig-job-accounts">{state.job.accounts.map(a => <div key={accountKey(a)} className={`ig-job-account ${a.status}`}><strong>@{a.username}</strong><span>→ @{a.target} · {TONES.find(t => t[0] === a.tone)?.[1]}</span><span className="status-pill">{accountLabel(a.status)}</span><span>{a.sent} terkirim · {a.skipped} dilewati · <Heart size={12} /> {a.liked}</span>{a.note && <small>{a.note}</small>}</div>)}</div>}
       <div className="ig-log" role="log" aria-label="Aktivitas Auto komen">{state.job?.logs.length ? [...state.job.logs].reverse().map((log, index) => <div key={`${log.at}-${index}`}><time>{new Date(log.at).toLocaleTimeString('id-ID')}</time><span>{log.username && <strong>@{log.username} · </strong>}{log.message}</span></div>) : <p>Belum ada aktivitas.</p>}</div>
     </section>
+    <LogHistory api={api} active={active} onError={onError} refreshKey={`${state.job?.id}:${state.job?.status}`} />
   </div>;
+}
+
+// Text logs of the last 7 days, newest first; one opens at a time.
+function LogHistory({ api, active, onError, refreshKey }) {
+  const [logs, setLogs] = useState([]), [open, setOpen] = useState(null), [text, setText] = useState(''), [loading, setLoading] = useState(false);
+  const load = () => api('/api/ig/logs').then(data => setLogs(data.logs)).catch(onError);
+  useEffect(() => { if (active) load(); }, [active, refreshKey]);
+  const show = async id => {
+    if (open === id) { setOpen(null); return; }
+    setOpen(id); setText(''); setLoading(true);
+    try { setText((await api(`/api/ig/logs/${encodeURIComponent(id)}`)).text); } catch (error) { onError(error); setOpen(null); } finally { setLoading(false); }
+  };
+  return <section className="settings-card ig-history">
+    <div className="ig-section-heading"><div><h2><History size={16} /> Riwayat proses</h2><p>Log teks setiap Pindai, Cek target, dan Auto komen. Disimpan 7 hari.</p></div><button className="button secondary" onClick={load}><RefreshCw size={14} />Muat ulang</button></div>
+    {!logs.length && <p className="muted">Belum ada riwayat.</p>}
+    <div className="ig-history-list">{logs.map(log => <div key={log.id} className={`ig-history-item ${open === log.id ? 'open' : ''}`}>
+      <button onClick={() => show(log.id)} aria-expanded={open === log.id}><span className="tiny-badge">{log.label.toUpperCase()}</span><span>{log.startedAt}</span><small>{Math.max(1, Math.round(log.size / 1024))} KB</small><ChevronDown size={14} /></button>
+      {open === log.id && <pre>{loading ? 'Memuat…' : text}</pre>}
+    </div>)}</div>
+  </section>;
 }
 
 function PlanFields({ value, onChange, disabled, id, optionalTarget = false }) {
