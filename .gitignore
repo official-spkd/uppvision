@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.phonefarm/
+*.log
+*.adb_key
+adbkey*
+.DS_Store
+__pycache__/
+XNTech.*.resources
+preview.jpg
+ig-*-preview.png
+connection-preview.png
