@@ -13,6 +13,10 @@ export async function adb(args, options = {}) {
   return (await exec(adbPath, args, { env: adbEnv, timeout: 8000, maxBuffer: 12 * 1024 * 1024, ...options })).stdout;
 }
 export function adbProcess(args) { return spawn(adbPath, args, { env: adbEnv, stdio: ['ignore', 'pipe', 'pipe'] }); }
+// Process id of the running adb server; it changes whenever the server restarts (which drops every adb reverse).
+export async function adbServerId() {
+  try { return (await exec('/usr/bin/pgrep', ['-f', 'fork-server server'])).stdout.trim().split('\n')[0] || null; } catch { return null; }
+}
 export async function listDevices() { return parseDevices(await adb(['devices', '-l'])); }
 export async function getDetails(serial) {
   const output = await adb(['-s', serial, 'shell', 'getprop ro.product.model; getprop ro.build.version.release; wm size; dumpsys battery']);

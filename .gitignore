@@ -10,3 +10,20 @@ XNTech.*.resources
 preview.jpg
 ig-*-preview.png
 connection-preview.png
+
+# Rahasia & data lokal: jangan pernah ikut ke repo publik.
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+id_rsa*
+*_rsa
+*.cookie
+cookies.txt
+secrets*.json
+*.jks
+*.keystore
+*.sqlite
+*.plist

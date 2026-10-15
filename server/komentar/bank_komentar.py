@@ -26,7 +26,7 @@ import penilai_komentar as penilai
 
 TONES = ("positif", "netral", "negatif")
 SUASANA = (
-    "bencana", "wafat", "berita", "prestasi", "edukasi", "hiburan",
+    "bencana", "wafat", "insiden", "risiko", "berita", "prestasi", "edukasi", "hiburan",
     "kuliner", "wisata", "acara", "olahraga", "umum",
 )
 
@@ -49,6 +49,9 @@ _KATA_SUASANA: dict[str, dict[str, int]] = {
         "duka cita": 2, "dukacita": 2, "rip": 2, "turut berduka": 2,
     },
     "bencana": {
+        "pemadaman listrik": 3, "listrik padam": 3, "mati lampu": 3,
+        "karhutla": 3, "kabut asap": 3, "asap pekat": 3, "polusi udara": 3,
+        "udara tidak sehat": 3, "kualitas udara memburuk": 3,
         "tenggelam": 3, "gempa": 3, "banjir": 3, "longsor": 3, "tsunami": 3,
         "erupsi": 3, "kebakaran": 3, "kecelakaan": 3, "tabrakan": 3,
         "evakuasi": 3, "dievakuasi": 3, "tim sar": 3, "basarnas": 3,
@@ -140,8 +143,26 @@ def deteksi_suasana(caption: str) -> str:
         return "umum"
     skor = _skor_suasana(caption)
     bencana, wafat = skor["bencana"], skor["wafat"]
-    if bencana >= 3 or wafat >= 3:
-        return "wafat" if wafat > bencana else "bencana"
+    if wafat >= 3:
+        return "wafat"
+    # Kekerasan/kejahatan tetap serius walau beritanya menyebut atlet, konser,
+    # atau wisata. Hindari kata "serangan" sendiri karena juga istilah olahraga.
+    insiden = {"penyerangan", "penganiayaan", "pengeroyokan", "pembunuhan",
+               "penusukan", "pencopetan", "perampokan", "penipuan", "kriminal",
+               "kekerasan", "kerusuhan", "pelecehan", "kdrt", "ditembak",
+               "pencurian", "mencuri", "dicuri", "maling", "curanmor",
+               "menewaskan", "tewas", "terbunuh"}
+    teks = " ".join(penilai.kata(caption))
+    frasa_insiden = ("mengambil ponsel", "kehilangan iphone", "laporan polisi", "dugaan pencurian")
+    if insiden.intersection(penilai.kata(caption)) or any(frasa in teks for frasa in frasa_insiden):
+        return "insiden"
+    # Generic words such as korban/hilang must not override an explicit crime.
+    if bencana >= 3:
+        return "bencana"
+    risiko = {"bpa", "bisphenol", "keracunan", "beracun", "karsinogen", "kanker",
+              "pestisida", "kontaminasi", "penyakit", "toksik"}
+    if risiko.intersection(penilai.kata(caption)):
+        return "risiko"
     lain = {s: n for s, n in skor.items() if s not in penilai.SUASANA_DUKA}
     terbaik = max(lain, key=lambda s: lain[s])
     return terbaik if lain[terbaik] >= 2 else "berita"
@@ -890,6 +911,51 @@ _EMOJI: dict[str, tuple[list[str], float]] = {
 }
 
 
+# Openers and closers for the safety branches in _bahan(). They assert nothing about the
+# event, because the general tables in _PEMBUKA/_PENUTUP contain lines that assume a waiting
+# family, an evacuation, medical needs or a recovery the caption never states.
+# The vocabulary deliberately avoids the words the safety cores rely on (semoga, keadaan,
+# kondisi, informasi, penanganan, keselamatan, dukungan, membaik, lancar, aman), because
+# _bentrok drops any partner that shares a content word with the core it is attached to.
+_AMAN: dict[str, tuple[list[str], list[str]]] = {
+    "bencana": (
+        ["Turut prihatin,", "Ikut prihatin,", "Prihatin,", "Turut sedih,", "Ikut sedih,", "Ikut merasakan,",
+         "Kabar ini berat,", "Terima kasih sudah berbagi,", "Terima kasih pemberitahuannya,",
+         "Mari kita doakan bersama,", "Turut menyimak,", "Duh,"],
+        ["Tetap waspada ya.", "Jaga diri baik-baik ya.", "Doa terbaik dari sini.", "Bantu doa dari sini.",
+         "Terima kasih sudah memberi tahu.", "Kabar baiknya ditunggu.", "Yang penting tuntas dulu.",
+         "Tetap kuat ya.", "Jangan lengah ya.", "Ikut mendoakan dari sini.", "Kami menyimak perkembangannya.",
+         "Terima kasih atas kabarnya."],
+    ),
+    "insiden": (
+        ["Turut prihatin,", "Ikut prihatin,", "Prihatin,", "Turut menyimak,", "Terima kasih sudah berbagi,",
+         "Mari kita doakan bersama,", "Terima kasih pemberitahuannya,", "Ikut merasakan,",
+         "Turut menyimak perkembangannya,", "Terima kasih kabarnya,", "Kami menyimak,",
+         "Terima kasih sudah membagikan,"],
+        ["Mudah-mudahan tuntas segera.", "Tetap waspada ya.", "Yang penting jelas dulu.",
+         "Doa terbaik dari sini.", "Jaga diri baik-baik ya.", "Terima kasih sudah memberi tahu.",
+         "Kabar baiknya ditunggu.", "Percayakan saja pada prosesnya.", "Mudah-mudahan jelas segera.",
+         "Kami menyimak perkembangannya.", "Terima kasih kabarnya.", "Tetap tenang ya."],
+    ),
+    "risiko": (
+        ["Terima kasih,", "Terima kasih banyak,", "Perlu diketahui,", "Bagus untuk diketahui,",
+         "Penting untuk dibaca,", "Terima kasih sudah berbagi,", "Mudah-mudahan makin banyak yang tahu,"],
+        ["Terima kasih.", "Pelan-pelan yang penting paham.", "Berguna sekali untuk dibaca.",
+         "Jangan ragu memeriksa lagi.", "Tetap waspada ya.", "Jaga diri dan keluarga ya.",
+         "Mudah-mudahan makin banyak yang tahu."],
+    ),
+    "berita": (
+        ["Terima kasih,", "Terima kasih banyak,", "Baik,", "Bagus,", "Terima kasih sudah berbagi,",
+         "Terima kasih pembaruannya,", "Turut menyimak,", "Terima kasih atas kabarnya,",
+         "Terima kasih sudah menyampaikan,", "Mudah-mudahan makin rapi,"],
+        ["Terima kasih.", "Pembaruannya ditunggu.", "Berguna untuk diikuti.",
+         "Kami menyimak perkembangannya.", "Mudah-mudahan makin banyak yang tahu.",
+         "Menarik untuk diikuti.", "Bagus kalau diteruskan.", "Terima kasih atas kabarnya.",
+         "Mudah-mudahan makin rapi.", "Mudah-mudahan berguna."],
+    ),
+}
+
+
 def _bahan(tone: str, suasana: str) -> tuple[str, str, list[str], list[str], list[str], str]:
     """(tone_dipakai, kunci, pembuka, inti, penutup, kunci_emoji) untuk tone+suasana.
 
@@ -899,6 +965,138 @@ def _bahan(tone: str, suasana: str) -> tuple[str, str, list[str], list[str], lis
     tone = _tone(tone)
     if suasana not in SUASANA:
         suasana = "berita"
+    if suasana == "berita" and tone == "positif":
+        # A positive tone appreciates information, not every event reported.
+        # Avoid inventing a policy/decision or inserting a broken entity span.
+        inti = [
+            "terima kasih sudah membagikan informasi ini",
+            "semoga pembaruan berikutnya membantu memperjelas situasi",
+            "semoga informasi ini bermanfaat bagi yang membutuhkannya",
+            "penting untuk terus mengikuti informasi dari sumber yang jelas",
+            "terima kasih sudah membantu pembaca mengikuti perkembangannya",
+            "semoga penjelasan dari pihak terkait segera tersedia",
+            "informasi yang lengkap membantu pembaca memahami konteksnya",
+            "semoga kabar berikutnya disertai penjelasan yang lebih lengkap",
+            "semoga masyarakat semakin mudah mengakses informasi yang akurat",
+            "terima kasih sudah mengangkat topik ini untuk diketahui pembaca",
+            "semoga pembahasannya tetap jelas dan berimbang",
+            "semoga setiap informasi yang dibagikan dapat diperiksa sumbernya",
+            "akan baik jika perkembangan selanjutnya terus diperbarui",
+            "semoga informasi lanjutan menjawab hal yang masih belum jelas",
+            "terima kasih sudah menyampaikan perkembangannya",
+            "semoga informasinya terus dilengkapi",
+            "semoga masyarakat mendapat gambaran yang utuh",
+            "semoga sumbernya mudah ditelusuri pembaca",
+            "semoga penjelasannya mudah dipahami banyak orang",
+            "semoga pemberitaannya tetap berimbang",
+            "semoga pembaca terbantu memahami situasinya",
+            "semoga setiap perkembangan disampaikan dengan jelas",
+            "semoga informasinya menjangkau yang membutuhkan",
+            "semoga topik ini terus dipantau bersama",
+            "akan membantu kalau setiap klaim disertai sumbernya",
+            "semoga pembaca tidak dibingungkan kabar yang belum jelas",
+            "semoga informasinya berguna bagi banyak pembaca",
+            "terima kasih sudah menyajikannya dengan rapi",
+            "semoga pembaca mendapat gambaran yang seimbang",
+            "semoga perkembangannya terus dipantau",
+        ]
+        pembuka, penutup = _AMAN["berita"]
+        return tone, "berita", [""] + pembuka, inti, [""] + penutup, "netral"
+    if suasana == "bencana":
+        # Do not invent trauma, a waiting family, evacuation or medical needs
+        # when the caption only establishes a hazard or a solidarity action.
+        inti = [
+            "semoga keadaan segera membaik dan semua tetap aman",
+            "semoga penanganannya berjalan lancar",
+            "semoga masyarakat mendapat informasi yang jelas dan tepat waktu",
+            "semoga semua pihak yang membantu diberi keselamatan",
+            "semoga kondisi di lapangan segera membaik",
+            "semoga dukungan yang dibutuhkan dapat segera tersalurkan",
+            "semoga keselamatan semua pihak tetap menjadi prioritas",
+            "semoga ada kabar yang lebih baik setelah ini",
+            "semoga penanganan di lapangan berjalan dengan aman",
+            "semoga informasi resminya mudah diikuti masyarakat",
+            "semoga semua prosesnya berjalan tanpa hambatan",
+            "semoga keadaan di lokasi segera terkendali",
+            "semoga upaya yang dilakukan membuahkan hasil yang baik",
+            "semoga situasinya segera lebih tenang",
+            "semoga semua yang terlibat tetap dijaga keselamatannya",
+            "semoga perkembangannya membaik dari waktu ke waktu",
+            "semoga penanganannya berjalan cepat dan tertata",
+            "semoga tidak ada hal yang memperburuk keadaan",
+            "semoga informasi lanjutannya semakin jelas",
+            "semoga kerja sama semua pihak berjalan baik",
+            "semoga situasi di lapangan segera lebih kondusif",
+            "semoga semua upaya penanganan berjalan sesuai rencana",
+            "semoga keadaan di lokasi segera pulih",
+            "semoga perkembangannya segera lebih baik",
+        ]
+        pembuka, penutup = _AMAN["bencana"]
+        return tone, "bencana", [""] + pembuka, inti, [""] + penutup, f"{tone}-duka"
+    if suasana == "risiko":
+        inti = [
+            "terima kasih sudah mengangkat pentingnya keselamatan dan kesehatan",
+            "semoga penjelasannya membantu masyarakat lebih waspada",
+            "informasi tentang risiko seperti ini perlu disampaikan dengan jelas",
+            "semoga informasi lanjutan disertai sumber yang mudah diperiksa",
+            "semoga masyarakat mendapat penjelasan yang lengkap dari ahlinya",
+            "penting untuk memastikan informasi kesehatan mudah dipahami",
+            "semoga pembahasannya membantu orang lebih teliti mencari informasi",
+            "semoga keselamatan masyarakat selalu menjadi perhatian utama",
+            "semoga penjelasannya membantu orang lebih berhati-hati",
+            "informasi seperti ini penting agar masyarakat tidak salah langkah",
+            "semoga sumbernya jelas sehingga mudah dipercaya",
+            "semoga masyarakat mendapat panduan yang mudah diikuti",
+            "semoga pembahasannya membantu mencegah hal yang tidak diinginkan",
+            "semoga penjelasannya menjangkau orang yang membutuhkannya",
+            "semoga informasinya mendorong kebiasaan yang lebih aman",
+            "semoga panduannya tidak membingungkan pembaca",
+            "semoga penjelasannya bisa diverifikasi dari sumber resmi",
+            "semoga kewaspadaan masyarakat meningkat dengan ini",
+            "semoga pesannya tersampaikan dengan cara yang jelas",
+            "semoga orang tua dan keluarga ikut terbantu memahaminya",
+        ]
+        pembuka, penutup = _AMAN["risiko"]
+        return tone, "risiko", [""] + pembuka, inti, [""] + penutup, f"{tone}-duka"
+    if suasana == "insiden":
+        # Positif berarti dukungan pada keselamatan/penanganan, bukan pujian
+        # atas insiden atau kemenangan tim yang kebetulan disebut caption.
+        inti = [
+            "semoga semua yang terdampak mendapat perlindungan dan pendampingan",
+            "semoga penanganannya segera memberi kejelasan bagi semua pihak",
+            "keselamatan semua pihak semoga tetap menjadi prioritas",
+            "semoga kejadian ini ditangani dengan adil dan tuntas",
+            "semoga pihak berwenang segera memastikan keadaan tetap aman",
+            "semoga ada langkah nyata agar kejadian serupa tidak terulang",
+            "semoga yang terdampak segera mendapat dukungan yang dibutuhkan",
+            "semoga proses penanganannya berjalan transparan",
+            "semoga penjelasannya membuat semua pihak tenang",
+            "semoga tidak ada pihak yang dirugikan",
+            "semoga keadaan segera kembali seperti semula",
+            "semoga keputusannya diambil dengan hati-hati",
+            "semoga semua pihak menahan diri sampai jelas",
+            "semoga penanganannya tidak berlarut-larut",
+            "semoga keterangannya mudah dipahami masyarakat",
+            "semoga pihak terkait menjelaskannya dengan terbuka",
+            "semoga penyelesaiannya mengedepankan keadilan",
+            "semoga pihak yang berwenang bekerja dengan cermat",
+            "semoga semua pihak mendapat penjelasan yang utuh",
+            "semoga penanganannya mengikuti prosedur yang berlaku",
+            "semoga pihak terkait menindaklanjutinya dengan serius",
+            "semoga keadaan tetap terkendali",
+            "semoga penyelesaiannya tidak memakan waktu lama",
+            "semoga semua pihak bisa bekerja sama dengan baik",
+            "semoga keputusannya mengedepankan kepentingan banyak orang",
+            "semoga keterbukaan informasinya terjaga",
+            "semoga tidak ada lagi hal serupa terjadi",
+            "semoga pihak yang bertanggung jawab segera bertindak",
+            "semoga prosesnya berjalan sesuai aturan",
+            "semoga semua pihak tetap tenang menunggu hasilnya",
+            "semoga hasilnya bisa diterima semua pihak",
+            "semoga penanganannya berpihak pada yang paling membutuhkan",
+        ]
+        pembuka, penutup = _AMAN["insiden"]
+        return tone, "insiden", [""] + pembuka, inti, [""] + penutup, f"{tone}-duka"
     duka = suasana in penilai.SUASANA_DUKA
     if tone == "negatif" and suasana == "wafat":
         tone = "netral"
@@ -982,46 +1180,45 @@ def buat_komentar(
     inti = _siapkan_inti(inti, bool(subjek))
     hindari = [h for h in hindari if h]
 
-    def satu(idx: int) -> str:
-        dasar = inti[idx]
+    # Enumerate every clash-free combination once instead of drawing at random. The old
+    # retry loop spent its whole budget on triples it had already rejected, which is why a
+    # job with hundreds of sent comments came up short ("Bank komentar tidak cukup").
+    kombinasi = [(dasar, p, q) for dasar in inti for p in pembuka
+                 if not (p and _bentrok(p, dasar))
+                 for q in penutup
+                 if not (q and (_bentrok(q, dasar) or (p and _bentrok(p, q))))]
+    random.shuffle(kombinasi)
+
+    def rakit(dasar: str, p: str, q: str) -> str:
         # Subjek utama (skor tertinggi) dipakai separuh waktu.
         s = (subjek[0] if random.random() < 0.5 else random.choice(subjek)) if subjek else ""
-        isi = dasar.replace("{S}", s)
-        p = random.choice(pembuka) if pembuka and random.random() < 0.55 else ""
-        q = random.choice(penutup) if penutup and random.random() < 0.5 else ""
-        if p and _bentrok(p, isi):
-            p = ""
-        if q and (_bentrok(q, isi) or (p and _bentrok(p, q))):
-            q = ""
         e = random.choice(pilihan_emoji) if pilihan_emoji and random.random() < peluang_emoji else ""
         return _rakit(dasar, s, p, q, e)
 
     hasil: list[str] = []
-    terpakai: set[int] = set()
-    percobaan = 0
-    while len(hasil) < jumlah and percobaan < jumlah * 80 + 200:
-        percobaan += 1
-        sisa = [i for i in range(len(inti)) if i not in terpakai] or list(range(len(inti)))
-        idx = random.choice(sisa)
-        teks = satu(idx)
+    # Pass 1 keeps the strict similarity rule so neighbouring accounts stay clearly different.
+    for dasar, p, q in kombinasi:
+        if len(hasil) >= jumlah:
+            break
+        teks = rakit(dasar, p, q)
         if penilai.periksa(teks, suasana, caption):
             continue
         if any(penilai.kemiripan(teks, h) >= 0.55 for h in hasil + hindari):
             continue
         hasil.append(teks)
-        terpakai.add(idx)
 
-    # Target sangat besar: longgarkan syarat kemiripan, tetap hindari kembar persis.
-    sudah = {h.lower() for h in hasil}
-    percobaan = 0
-    while len(hasil) < jumlah and percobaan < jumlah * 50:
-        percobaan += 1
-        teks = satu(random.randrange(len(inti)))
-        if teks.lower() not in sudah:
+    # Pass 2: a large request can exhaust the strictly-different combinations. Relax the
+    # similarity rule, but never repeat a line that was already sent for this account.
+    if len(hasil) < jumlah:
+        sudah = {h.lower() for h in hasil} | {h.lower() for h in hindari}
+        for dasar, p, q in kombinasi:
+            if len(hasil) >= jumlah:
+                break
+            teks = rakit(dasar, p, q)
+            if teks.lower() in sudah:
+                continue
             sudah.add(teks.lower())
             hasil.append(teks)
-    while len(hasil) < jumlah and hasil:
-        hasil.append(random.choice(hasil))
     return hasil[:jumlah]
 
 

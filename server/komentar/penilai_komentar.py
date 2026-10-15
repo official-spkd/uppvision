@@ -17,7 +17,7 @@ import random
 import re
 from typing import Iterable
 
-SUASANA_DUKA = frozenset({"bencana", "wafat"})
+SUASANA_DUKA = frozenset({"bencana", "wafat", "insiden", "risiko"})
 
 # Slang/candaan yang tidak pantas muncul di postingan musibah atau kabar duka.
 _DILARANG_DUKA = frozenset({

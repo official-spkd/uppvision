@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 // Text logs of every Instagram process (scan, check, auto comment), kept for 7 days.
 export const LOG_DAYS = 7;
-const KINDS = { komen: 'Auto komen', cek: 'Cek target', pindai: 'Pindai akun' };
-const NAME = /^(komen|cek|pindai)-(\d{8})-(\d{6})(?:-(\d+))?\.log$/;
+const KINDS = { komen: 'Auto komen', cek: 'Cek target', pindai: 'Pindai akun', link: 'Ambil link', internet: 'Internet', ttkomen: 'TikTok · Auto komen', ttcek: 'TikTok · Cek target', ttpindai: 'TikTok · Pindai akun' };
+const NAME = /^(komen|cek|pindai|link|internet|ttkomen|ttcek|ttpindai)-(\d{8})-(\d{6})(?:-(\d+))?\.log$/;
 const pad = n => String(n).padStart(2, '0');
 const stamp = date => `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 export const clock = date => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;

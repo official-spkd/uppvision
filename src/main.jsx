@@ -1,14 +1,30 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Smartphone, LayoutGrid, Cable, Settings2, ArrowUpRight, ArrowLeft, Circle, Square, Search, RefreshCw, Play, Pause, ChevronDown, X, Maximize2, Battery, BatteryCharging, Volume2, Volume1, Sun, Moon, Download, Keyboard, Check, CheckCheck, Wifi, Usb, Monitor, Info, AlertCircle, Radio, Layers, Pencil, Command, Plus, Camera as Instagram } from 'lucide-react';
+import { Smartphone, LayoutGrid, Cable, Settings2, ArrowUpRight, ArrowLeft, Circle, Square, Search, RefreshCw, Play, Pause, ChevronDown, X, Maximize2, Battery, BatteryCharging, Volume2, Volume1, Sun, Moon, Download, Keyboard, Check, CheckCheck, Wifi, Usb, Monitor, Info, AlertCircle, Radio, Layers, Pencil, Command, Plus, WifiOff, Music2, Camera as Instagram, RotateCw, BookOpen } from 'lucide-react';
 import './styles.css';
+import GuideWorkspace from './GuideWorkspace.jsx';
 import InstagramWorkspace from './InstagramWorkspace.jsx';
+import SocialWorkspace, { SOCIAL_WORKSPACES } from './SocialWorkspace.jsx';
+import FloatingWindow from './FloatingWindow.jsx';
+import NetworkSettings, { methodLabel } from './NetworkSettings.jsx';
+import { connectionStatus } from './connection-status.mjs';
 
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Layanan lokal tidak merespons.');
   return data;
+}
+function InternetLine({ info, preference, onCheck, onConfigure, disabled }) {
+  const state = info?.state || 'unknown';
+  const check = connectionStatus(info);
+  return <div className={`device-internet ${check.stale ? 'stale' : state}`} title={[check.age, info?.message].filter(Boolean).join(' · ')}>
+    <span>{state === 'offline' ? <WifiOff size={12} /> : <Wifi size={12} />}{check.message}{info?.wifi ? ` · Wi-Fi: ${info.wifi}` : ''}</span>
+    <span>{check.age}{check.warning ? ` · ${check.warning}` : ''}</span>
+    <span>Pilihan: {methodLabel(preference?.method)} · Aktif: {methodLabel(info?.activeMethod || 'unknown')}</span>
+    {!['restoring', 'checking'].includes(state) && <button onClick={onCheck} disabled={disabled}>Cek internet</button>}
+    <button onClick={onConfigure} disabled={disabled}>Atur internet</button>
+  </div>;
 }
 const statusLabel = status => ({ device: 'Terhubung', unauthorized: 'Perlu izin', offline: 'Offline', recovery: 'Recovery', sideload: 'Sideload' })[status] || 'Tidak terdeteksi';
 function IconButton({ label, children, onClick, disabled, className = '' }) { return <button className={`icon-button ${className}`} type="button" title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>; }
@@ -70,12 +86,12 @@ function Screen({ device, enabled, onInput, onError, large = false }) {
     canvasRef.current.lastScroll = now;
     onInput(device.serial, { type: 'swipe', x: .5, y: event.deltaY > 0 ? .75 : .3, endX: .5, endY: event.deltaY > 0 ? .3 : .75, duration: 250 }).catch(onError);
   };
-  return <div className={`screen-shell ${large ? 'large' : ''}`} style={{ aspectRatio: ratio }}>
+  return <div className={`screen-shell ${large ? 'large' : ''}`} style={{ aspectRatio: ratio, ...(large ? { width: `min(100%, calc(var(--screen-max-height) * ${ratio}))` } : {}) }}>
     <canvas ref={canvasRef} className={state === 'live' ? 'screen-canvas' : 'screen-canvas hidden-canvas'} onPointerDown={down} onPointerUp={up} onPointerCancel={() => { pointer.current = null; }} onWheel={wheel} aria-label={`Layar ${device.name}; klik untuk ketuk, seret untuk geser`} />
     {state !== 'live' && <div className="screen-overlay">
       <div className="screen-overlay-icon">{state === 'connecting' ? <RefreshCw className="spin" size={25} /> : state === 'error' ? <AlertCircle size={25} /> : <Smartphone size={28} />}</div>
       <strong>{device.status !== 'device' ? statusLabel(device.status) : state === 'connecting' ? 'Menghubungkan layar' : state === 'error' ? 'Layar belum tersedia' : 'Pratinjau dijeda'}</strong>
-      <span>{device.status === 'unauthorized' ? 'Board belum menerima kunci ADB Mac.' : device.status !== 'device' ? 'Menunggu board tersambung kembali ke USB.' : state === 'error' ? message : state === 'connecting' ? 'Menyiapkan layar perangkat…' : 'Buka mode fokus atau aktifkan pratinjau.'}</span>
+      <span>{device.status === 'unauthorized' ? 'Board belum menerima kunci ADB Mac.' : device.status !== 'device' ? 'Menunggu board tersambung kembali ke USB.' : state === 'error' ? message : state === 'connecting' ? 'Menyiapkan layar perangkat…' : 'Buka layar mengambang atau aktifkan pratinjau.'}</span>
       {state === 'error' && <button className="screen-retry" onClick={() => setRetry(r => r + 1)}><RefreshCw size={13} /> Coba lagi</button>}
     </div>}
     {state === 'live' && <span className="live-tag"><i /> LIVE</span>}
@@ -104,8 +120,10 @@ function BoxStatus({ box }) {
 function App() {
   const [snapshot, setSnapshot] = useState({ devices: [], expectedCount: 19, lastUpdated: null }), [ready, setReady] = useState(false), [bridgeOnline, setBridgeOnline] = useState(false);
   const [workspaceMenu, setWorkspaceMenu] = useState(false);
+  const [networkFocus, setNetworkFocus] = useState(null);
   const [page, setPage] = useState('devices'), [search, setSearch] = useState(''), [filter, setFilter] = useState('all'), [paused, setPaused] = useState(false), [selected, setSelected] = useState(new Set()), [sync, setSync] = useState(false);
-  const [focus, setFocus] = useState(null), [toast, setToast] = useState(null), [scanning, setScanning] = useState(false), [connection, setConnection] = useState(null), [textModal, setTextModal] = useState(null), [text, setText] = useState(''), [sending, setSending] = useState(false), [rename, setRename] = useState(null), [newName, setNewName] = useState(''), [slotCount, setSlotCount] = useState(19), [compact, setCompact] = useState(false), [pageVisible, setPageVisible] = useState(document.visibilityState === 'visible');
+  const [windows, setWindows] = useState([]), [rotating, setRotating] = useState(new Set());
+  const [focus, setFocus] = useState(null), [toast, setToast] = useState(null), [scanning, setScanning] = useState(false), [connection, setConnection] = useState(null), [textModal, setTextModal] = useState(null), [text, setText] = useState(''), [sending, setSending] = useState(false), [rename, setRename] = useState(null), [newName, setNewName] = useState(''), [slotCount, setSlotCount] = useState(19), [compact, setCompact] = useState(false), [pageVisible, setPageVisible] = useState(document.visibilityState === 'visible'), [stoppingAll, setStoppingAll] = useState(false);
   useEffect(() => { const update = () => setPageVisible(document.visibilityState === 'visible'); document.addEventListener('visibilitychange', update); return () => document.removeEventListener('visibilitychange', update); }, []);
   const notify = useCallback((message, error = false) => setToast({ message, error, id: Date.now() }), []);
   const onError = useCallback(error => notify(error.message || 'Operasi gagal.', true), [notify]);
@@ -125,7 +143,7 @@ function App() {
     start(); return () => { cancelled = true; events?.close(); clearTimeout(retry); };
   }, []);
   useEffect(() => {
-    if (page !== 'connection' || !bridgeOnline) return;
+    if (page !== 'connection' || !bridgeOnline || snapshot.offline) return;
     let active = true;
     const refresh = () => api('/api/connection').then(data => { if (active) setConnection(data); }).catch(onError);
     refresh(); const timer = setInterval(refresh, 6000); return () => { active = false; clearInterval(timer); };
@@ -136,6 +154,17 @@ function App() {
   }, [snapshot.devices]);
   const devices = snapshot.devices, online = devices.filter(d => d.status === 'device'), waiting = devices.filter(d => d.status === 'unauthorized'), missing = Math.max(0, snapshot.expectedCount - (snapshot.detectedCount ?? devices.length));
   const focusedDevice = devices.find(d => d.serial === focus);
+  const openScreen = serial => { setWindows(old => old.includes(serial) ? old : [...old, serial]); setFocus(serial); };
+  const closeScreen = serial => { setWindows(old => old.filter(value => value !== serial)); setFocus(old => old === serial ? null : old); };
+  const rotate = async (device, mode = 'clockwise') => {
+    setRotating(old => new Set(old).add(device.serial));
+    try {
+      const display = await api(`/api/devices/${encodeURIComponent(device.serial)}/rotation`, { method: 'POST', body: JSON.stringify({ mode }) });
+      setSnapshot(old => ({ ...old, devices: old.devices.map(value => value.serial === device.serial ? { ...value, ...display } : value) }));
+      notify(mode === 'auto' ? `Rotasi otomatis ${device.name} diaktifkan.` : `${device.name} diputar 90° dan orientasinya dikunci.`);
+    } catch (error) { onError(error); }
+    finally { setRotating(old => { const next = new Set(old); next.delete(device.serial); return next; }); }
+  };
   const visible = devices.filter(d => (filter === 'all' || (filter === 'online' ? d.status === 'device' : d.status !== 'device')) && `${d.name} ${d.model} ${d.serial}`.toLowerCase().includes(search.toLowerCase()));
   const toggleSelected = serial => setSelected(old => { const next = new Set(old); next.has(serial) ? next.delete(serial) : next.add(serial); return next; });
   const send = useCallback(async (serial, action) => {
@@ -143,7 +172,25 @@ function App() {
     const results = await Promise.allSettled(targets.map(target => api(`/api/devices/${encodeURIComponent(target)}/input`, { method: 'POST', body: JSON.stringify(action) })));
     const failure = results.find(result => result.status === 'rejected'); if (failure) throw failure.reason;
   }, [sync, selected]);
+  const checkInternet = serial => api(`/api/internet/${encodeURIComponent(serial)}/check`, { method: 'POST' }).then(data => { setSnapshot(data); notify('Memeriksa internet HP tanpa mengubah koneksi.'); }).catch(onError);
+  const reconnectAll = () => api('/api/internet/check', { method: 'POST' }).then(data => { setSnapshot(data); notify('Memeriksa internet semua HP tanpa mengubah koneksi.'); }).catch(onError);
   const scan = async () => { setScanning(true); try { const data = await api('/api/scan', { method: 'POST' }); setSnapshot(data); notify(`Pemindaian selesai. ${data.devices.filter(d => d.status === 'device').length} perangkat siap.`); } catch (error) { onError(error); } finally { setScanning(false); } };
+  // Stop total: mematikan semua proses di kedua platform dan membersihkan penanda yang
+  // tersangkut, supaya pekerjaan berikutnya tidak lagi ditolak karena dianggap masih berjalan.
+  const stopAll = async () => {
+    setStoppingAll(true);
+    try {
+      const data = await api('/api/stop-all', { method: 'POST' });
+      setSnapshot(data);
+      const report = data.stopAll || {};
+      const wasRunning = [...(report.ig?.stopped || []), ...(report.tt?.stopped || [])];
+      const cleared = [...(report.ig?.forced || []), ...(report.tt?.forced || [])];
+      const parts = [];
+      if (wasRunning.length) parts.push(`dihentikan: ${wasRunning.join(', ')}`);
+      if (cleared.length) parts.push(`dibersihkan: ${cleared.join(', ')}`);
+      notify(parts.length ? `Stop total selesai · ${parts.join(' · ')}.` : 'Stop total selesai: tidak ada proses yang berjalan.');
+    } catch (error) { onError(error); } finally { setStoppingAll(false); }
+  };
   const bulkKey = async key => { try { await Promise.all([...selected].map(serial => api(`/api/devices/${encodeURIComponent(serial)}/input`, { method: 'POST', body: JSON.stringify({ type: 'key', key }) }))); notify(`Kontrol dikirim ke ${selected.size} perangkat.`); } catch (error) { onError(error); } };
   const screenshot = async device => {
     try {
@@ -157,96 +204,124 @@ function App() {
   const saveSlots = async event => { event.preventDefault(); try { setSnapshot(await api('/api/settings', { method: 'PATCH', body: JSON.stringify({ expectedCount: Number(slotCount) }) })); notify('Jumlah slot disimpan.'); } catch (error) { onError(error); } };
   useEffect(() => {
     const handle = event => {
-      if (event.key === 'Escape') { if (textModal) setTextModal(null); else if (rename) setRename(null); else setFocus(null); return; }
-      if (event.key === 'Tab' && (focus || textModal || rename)) {
+      if (event.key === 'Escape') { if (textModal) setTextModal(null); else if (rename) setRename(null); else if (event.target.closest('[data-device-window]')) closeScreen(focus); return; }
+      if (event.key === 'Tab' && (textModal || rename)) {
         const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
         const controls = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea, a[href]')];
         const first = controls[0], last = controls.at(-1);
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
-      if (!focusedDevice || ['INPUT', 'TEXTAREA'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!focusedDevice || textModal || rename || !event.target.closest('[data-device-window]') || ['INPUT', 'TEXTAREA'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
       const key = { Backspace: 'back', Home: 'home', Enter: 'enter', Delete: 'delete' }[event.key];
       if (key) { event.preventDefault(); send(focusedDevice.serial, { type: 'key', key }).catch(onError); }
     };
     document.addEventListener('keydown', handle); return () => document.removeEventListener('keydown', handle);
   }, [focusedDevice, send, focus, textModal, rename]);
   useEffect(() => {
-    if (!(focus || textModal || rename)) return;
+    if (!(textModal || rename)) return;
     const previous = document.activeElement;
     const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
     dialog?.querySelector('textarea, input, button')?.focus();
     return () => { if (previous?.isConnected) previous.focus(); };
-  }, [focus, Boolean(textModal), Boolean(rename)]);
+  }, [Boolean(textModal), Boolean(rename)]);
 
+  useEffect(() => { window.scrollTo(0, 0); }, [page]);
+  const socialPage = SOCIAL_WORKSPACES.find(workspace => workspace.id === page);
+  const workspaceName = socialPage?.name || (page === 'guide' ? 'Panduan' : page === 'ig' ? 'ig' : page === 'tiktok' ? 'TikTok' : 'Farm saya');
   return <div className="app">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={event => { event.preventDefault(); setPage('devices'); }}><span className="brand-mark"><Smartphone size={23} strokeWidth={2.2} /></span><span>phonefarm<span className="brand-sub">RUANG KENDALI</span></span></a>
-      <div className="workspace-picker"><button className="workspace-select" onClick={() => setWorkspaceMenu(value => !value)} aria-expanded={workspaceMenu} aria-label="Pilih workspace"><span className="workspace-avatar">{page === 'ig' ? 'ig' : 'PF'}</span><div><strong>{page === 'ig' ? 'ig' : 'Farm saya'}</strong><span>Workspace lokal</span></div><ChevronDown size={15} /></button>{workspaceMenu && <div className="workspace-dropdown"><button onClick={() => { setPage('devices'); setWorkspaceMenu(false); }}><Smartphone size={16} />Farm saya</button><button onClick={() => { setPage('ig'); setWorkspaceMenu(false); }}><Instagram size={16} />ig</button></div>}</div>
+      <div className="workspace-picker"><button className="workspace-select" onClick={() => setWorkspaceMenu(value => !value)} aria-expanded={workspaceMenu} aria-label="Pilih workspace"><span className="workspace-avatar">{socialPage?.mark || (page === 'ig' ? 'ig' : page === 'tiktok' ? 'tt' : 'PF')}</span><div><strong>{workspaceName}</strong><span>Workspace lokal</span></div><ChevronDown size={15} /></button>{workspaceMenu && <div className="workspace-dropdown"><button onClick={() => { setPage('devices'); setWorkspaceMenu(false); }}><Smartphone size={16} />Farm saya</button><button onClick={() => { setPage('ig'); setWorkspaceMenu(false); }}><Instagram size={16} />ig</button><button onClick={() => { setPage('tiktok'); setWorkspaceMenu(false); }}><Music2 size={16} />TikTok</button><button onClick={() => { setPage('guide'); setWorkspaceMenu(false); }}><BookOpen size={16} />Panduan</button>{SOCIAL_WORKSPACES.map(workspace => <button key={workspace.id} onClick={() => { setPage(workspace.id); setWorkspaceMenu(false); }}><span className="social-nav-mark">{workspace.mark}</span>{workspace.name}</button>)}</div>}</div>
       <div className="nav-caption">WORKSPACE</div>
       <nav>
         <button className={page === 'devices' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('devices')}><LayoutGrid size={18} />Perangkat<span className="nav-count">{online.length}</span></button>
         <button className={page === 'connection' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('connection')}><Cable size={18} />Koneksi{waiting.length > 0 && <span className="nav-warning">{waiting.length}</span>}</button>
         <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('settings')}><Settings2 size={18} />Pengaturan</button>
         <button className={page === 'ig' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('ig')}><Instagram size={18} />ig</button>
+        <button className={page === 'tiktok' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('tiktok')}><Music2 size={18} />TikTok</button>
+        {SOCIAL_WORKSPACES.map(workspace => <button key={workspace.id} className={page === workspace.id ? 'nav-item active' : 'nav-item'} onClick={() => setPage(workspace.id)}><span className="social-nav-mark">{workspace.mark}</span>{workspace.name}<span className="social-nav-status">SIM</span></button>)}
+        <button className={page === 'guide' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('guide')}><BookOpen size={18} />Panduan</button>
       </nav>
       <div className="sidebar-foot">
-        <div className="local-card"><span className="local-icon"><Monitor size={18} /></span><strong>Berjalan di Mac ini</strong><p>Hubungkan phonefarm lewat USB untuk mulai mengontrol.</p><div><i className={bridgeOnline ? 'dot green' : 'dot gray'} />{bridgeOnline ? 'Layanan lokal aktif' : 'Menghubungkan layanan'}</div></div>
+        <div className="local-card"><span className="local-icon"><Monitor size={18} /></span><strong>Berjalan di Mac ini</strong><p>{snapshot.offline ? 'Mode tanpa perangkat. Coba workspace simulasi dari Mac ini.' : 'Hubungkan phonefarm lewat USB untuk mulai mengontrol.'}</p><div><i className={bridgeOnline ? 'dot green' : 'dot gray'} />{bridgeOnline ? 'Layanan lokal aktif' : 'Menghubungkan layanan'}</div></div>
         <div className="profile"><span className="profile-avatar">M</span><div><strong>Mac workspace</strong><span>Phonefarm Panel · v0.1</span></div></div>
       </div>
     </aside>
     <div className="main-shell">
-      <header className="topbar"><div className="breadcrumb">Workspace <span>/</span><strong>{page === 'devices' ? 'Perangkat' : page === 'connection' ? 'Koneksi' : page === 'ig' ? 'ig' : 'Pengaturan'}</strong></div><div className="topbar-right"><span className="local-badge"><i className={bridgeOnline ? 'dot green' : 'dot gray'} />{bridgeOnline ? 'Terhubung ke Mac' : 'Layanan terputus'}</span><span className="topbar-divider" /><span className="user-avatar">M</span></div></header>
+      <header className="topbar"><div className="breadcrumb">Workspace <span>/</span><strong>{socialPage ? socialPage.name : page === 'guide' ? 'Panduan' : page === 'devices' ? 'Perangkat' : page === 'connection' ? 'Koneksi' : page === 'ig' ? 'ig' : page === 'tiktok' ? 'TikTok' : 'Pengaturan'}</strong></div><div className="topbar-right"><button type="button" className="button stop-button stop-all" onClick={stopAll} disabled={stoppingAll || !bridgeOnline} title="Stop total: hentikan semua proses dan bersihkan penanda yang tersangkut"><Square size={13} />{stoppingAll ? 'Menghentikan…' : 'Stop total'}</button><span className="local-badge"><i className={bridgeOnline ? 'dot green' : 'dot gray'} />{bridgeOnline ? 'Terhubung ke Mac' : 'Layanan terputus'}</span><span className="topbar-divider" /><span className="user-avatar">M</span></div></header>
       <main>
-        <div className="page-heading"><div><div className="eyebrow">PHONEFARM CONTROL CENTER</div><h1>{page === 'devices' ? 'Semua perangkat' : page === 'connection' ? 'Koneksi perangkat' : page === 'ig' ? 'Workspace ig' : 'Pengaturan workspace'}<span className="heading-dot">.</span></h1><p>{page === 'devices' ? 'Satu ruang untuk melihat dan mengontrol seluruh HP kamu.' : page === 'connection' ? 'Lihat jalur USB, izin perangkat, dan status koneksi ke Mac.' : page === 'ig' ? 'Kelola pekerjaan Instagram dari akun yang login di phonefarm kamu.' : 'Sesuaikan panel dengan susunan phonefarm kamu.'}</p></div><button className="button secondary" onClick={scan} disabled={scanning || !bridgeOnline}><RefreshCw size={15} className={scanning ? 'spin' : ''} />{scanning ? 'Memindai…' : 'Pindai perangkat'}</button></div>
+        <div className="page-heading"><div><div className="eyebrow">PHONEFARM CONTROL CENTER</div><h1>{socialPage ? `Workspace ${socialPage.name}` : page === 'guide' ? 'Panduan' : page === 'devices' ? 'Semua perangkat' : page === 'connection' ? 'Koneksi perangkat' : page === 'ig' ? 'Workspace ig' : page === 'tiktok' ? 'Workspace TikTok' : 'Pengaturan workspace'}<span className="heading-dot">.</span></h1><p>{socialPage ? `Siapkan dan coba alur ${socialPage.name} tanpa perangkat melalui simulasi.` : page === 'guide' ? 'Langkah kerja script dan acuan pengembangan untuk semua sosmed.' : page === 'devices' ? 'Satu ruang untuk melihat dan mengontrol seluruh HP kamu.' : page === 'connection' ? 'Lihat jalur USB, izin perangkat, dan status koneksi ke Mac.' : page === 'ig' ? 'Kelola pekerjaan Instagram dari akun yang login di phonefarm kamu.' : 'Sesuaikan panel dengan susunan phonefarm kamu.'}</p></div>{!socialPage && page !== 'guide' && <button className="button secondary" onClick={scan} disabled={scanning || !bridgeOnline || snapshot.offline}><RefreshCw size={15} className={scanning ? 'spin' : ''} />{scanning ? 'Memindai…' : 'Pindai perangkat'}</button>}</div>
         {!bridgeOnline && ready && <div className="notice error"><AlertCircle size={18} /><div><strong>Layanan lokal belum terhubung</strong><span>Panel akan tersambung kembali secara otomatis saat layanan aktif.</span></div></div>}
         {snapshot.error && <div className="notice error"><AlertCircle size={18} /><span>{snapshot.error}</span></div>}
-        {page !== 'ig' && <div className="stats-grid">
+        {!socialPage && !['ig', 'tiktok', 'guide'].includes(page) && <div className="stats-grid">
           <div className="stat-card"><span className="stat-icon blue"><Smartphone size={18} /></span><span className="stat-label">Total slot</span><div className="stat-value">{snapshot.expectedCount}<span>perangkat</span></div><span className="stat-note">Kapasitas farm kamu</span></div>
-          <div className="stat-card"><span className="stat-icon green-bg"><Radio size={18} /></span><span className="stat-label">Terhubung</span><div className="stat-value">{online.length}<span className="stat-pill green-bg">{online.length ? 'Siap dikontrol' : 'Menunggu board'}</span></div><span className="stat-note"><i className={`dot ${online.length ? 'green' : 'gray'}`} />Koneksi langsung lewat USB / Wi-Fi</span></div>
+          <div className="stat-card"><span className="stat-icon green-bg"><Radio size={18} /></span><span className="stat-label">Terhubung</span><div className="stat-value">{online.length}<span className="stat-pill green-bg">{online.length ? 'Siap dikontrol' : 'Menunggu board'}</span></div><span className="stat-note"><i className={`dot ${snapshot.internetSummary?.offline ? 'amber-dot' : online.length ? 'green' : 'gray'}`} />{snapshot.internetSummary?.total ? `Internet: ${snapshot.internetSummary.online} dari ${snapshot.internetSummary.total} HP` : 'Koneksi langsung lewat USB / Wi-Fi'}</span></div>
           <div className="stat-card"><span className="stat-icon amber-bg"><Cable size={18} /></span><span className="stat-label">Belum terdeteksi</span><div className="stat-value">{missing}<span>slot</span></div><span className="stat-note">Periksa daya dan mode USB board</span></div>
           <div className="stat-card"><span className="stat-icon purple"><CheckCheck size={18} /></span><span className="stat-label">Dipilih</span><div className="stat-value">{selected.size}<span>perangkat</span></div><span className="stat-note">Untuk kontrol bersama</span></div>
         </div>}
-        <div hidden={page !== 'ig'}><InstagramWorkspace api={api} active={page === 'ig'} bridgeOnline={bridgeOnline} devices={devices} onError={onError} notify={notify} openDevice={setFocus} /></div>
+        <div hidden={page !== 'ig'}><InstagramWorkspace api={api} active={page === 'ig'} bridgeOnline={bridgeOnline && !snapshot.offline} devices={devices} internet={snapshot.internet || {}} onError={onError} notify={notify} openDevice={setFocus} /></div>
+        <div hidden={page !== 'tiktok'}><InstagramWorkspace platform="tt" api={api} active={page === 'tiktok'} bridgeOnline={bridgeOnline && !snapshot.offline} devices={devices} internet={snapshot.internet || {}} onError={onError} notify={notify} openDevice={setFocus} /></div>
+        {page === 'guide' && <GuideWorkspace />}
+        {socialPage && <SocialWorkspace key={socialPage.id} platform={socialPage.id} api={api} bridgeOnline={bridgeOnline} onError={onError} notify={notify} />}
+        {snapshot.offline && ['ig', 'tiktok', 'connection', 'settings', 'devices'].includes(page) && <div className="notice"><Info size={18} /><span>Mode tanpa perangkat aktif. Pengujian lokal tersedia di workspace X, Threads, Facebook, dan YouTube.</span></div>}
 
         {page === 'devices' && <>
           <div className="workspace-body">
             <section className="devices-panel">
-              <div className="panel-header"><div className="panel-title"><span className="panel-icon"><LayoutGrid size={17} /></span><h2>Layar perangkat</h2><span className="count-badge">{devices.length}</span></div><div className="view-buttons"><IconButton label={paused ? 'Aktifkan semua pratinjau' : 'Jeda semua pratinjau'} onClick={() => setPaused(p => !p)}>{paused ? <Play size={16} /> : <Pause size={16} />}</IconButton><IconButton label={compact ? 'Kartu besar' : 'Kartu ringkas'} onClick={() => setCompact(c => !c)} className={compact ? 'active-icon' : ''}><Layers size={16} /></IconButton></div></div>
+              <div className="panel-header"><div className="panel-title"><span className="panel-icon"><LayoutGrid size={17} /></span><h2>Layar perangkat</h2><span className="count-badge">{devices.length}</span></div><div className="view-buttons"><IconButton label="Cek internet semua HP" onClick={reconnectAll} disabled={snapshot.offline}><Wifi size={16} /></IconButton><IconButton label={paused ? 'Aktifkan semua pratinjau' : 'Jeda semua pratinjau'} onClick={() => setPaused(p => !p)}>{paused ? <Play size={16} /> : <Pause size={16} />}</IconButton><IconButton label={compact ? 'Kartu besar' : 'Kartu ringkas'} onClick={() => setCompact(c => !c)} className={compact ? 'active-icon' : ''}><Layers size={16} /></IconButton></div></div>
               <div className="devices-toolbar"><div className="filter-tabs"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}>Semua <span>{devices.length}</span></button><button className={filter === 'online' ? 'selected' : ''} onClick={() => setFilter('online')}>Terhubung</button><button className={filter === 'attention' ? 'selected' : ''} onClick={() => setFilter('attention')}>Perlu perhatian{waiting.length > 0 && <span>{waiting.length}</span>}</button></div><label className="search"><Search size={15} /><input placeholder="Cari perangkat…" value={search} onChange={event => setSearch(event.target.value)} aria-label="Cari nama, model, atau serial perangkat" />{search && <button onClick={() => setSearch('')} aria-label="Hapus pencarian"><X size={13} /></button>}</label></div>
               {selected.size > 0 && <div className="selection-bar"><span><CheckCheck size={15} />{selected.size} dipilih</span><label className="sync-toggle"><input type="checkbox" checked={sync} onChange={event => setSync(event.target.checked)} /><span />Kontrol sinkron</label><button onClick={() => bulkKey('home')}><Circle size={14} /> Home</button><button onClick={() => bulkKey('wake')}><Sun size={14} /> Bangunkan</button><button className="selection-clear" onClick={() => { setSelected(new Set()); setSync(false); }}>Batal</button></div>}
               <div className={`device-grid ${compact ? 'compact' : ''}`}>
                 {visible.map(device => <article className={`device-card ${selected.has(device.serial) ? 'selected-card' : ''}`} key={device.serial}>
-                  <div className="device-card-heading"><label className="device-selection"><input type="checkbox" checked={selected.has(device.serial)} onChange={() => toggleSelected(device.serial)} disabled={device.status !== 'device'} aria-label={`Pilih ${device.name}`} /><span>{selected.has(device.serial) && <Check size={12} />}</span></label><span className="device-name" title={device.name}>{device.name}</span><IconButton label={`Buka layar ${device.name}`} onClick={() => setFocus(device.serial)}><ArrowUpRight size={17} /></IconButton></div>
+                  <div className="device-card-heading"><label className="device-selection"><input type="checkbox" checked={selected.has(device.serial)} onChange={() => toggleSelected(device.serial)} disabled={device.status !== 'device'} aria-label={`Pilih ${device.name}`} /><span>{selected.has(device.serial) && <Check size={12} />}</span></label><span className="device-name" title={device.name}>{device.name}</span><IconButton label={`Rotate ${device.name} 90°`} onClick={() => rotate(device)} disabled={device.status !== 'device' || rotating.has(device.serial)}><RotateCw size={16} className={rotating.has(device.serial) ? 'spin' : ''} /></IconButton><IconButton label={`Buka layar ${device.name}`} onClick={() => openScreen(device.serial)}><ArrowUpRight size={17} /></IconButton></div>
                   <div className="phone-frame"><Screen device={device} enabled={!paused && pageVisible} onInput={send} onError={onError} /><Navigation device={device} onInput={send} onError={onError} /></div>
                   <div className="device-card-meta"><div><strong>{device.model}</strong><span>{device.serial}</span></div><span className={`device-status ${device.status === 'device' ? 'online' : 'attention'}`}><i />{device.status === 'device' ? 'Online' : statusLabel(device.status)}</span></div>
+                  {device.status === 'device' && <InternetLine info={snapshot.internet?.[device.serial]} preference={snapshot.networkPreferences?.[device.serial]} onCheck={() => checkInternet(device.serial)} onConfigure={() => { setNetworkFocus(device.serial); setPage('connection'); }} />}
                   <div className="device-card-footer"><span><Usb size={13} />{device.transport}</span>{device.android && <span>Android {device.android}</span>}{device.battery !== null && device.battery !== undefined && <span className="battery">{device.charging ? <BatteryCharging size={15} /> : <Battery size={15} />}{device.battery}%</span>}</div>
                 </article>)}
-                {visible.length === 0 && <div className="empty-state"><span><Smartphone size={30} /></span><h3>{!ready ? 'Menghubungkan phonefarm…' : search || filter !== 'all' ? 'Tidak ada perangkat yang cocok' : 'Menunggu perangkat kamu'}</h3><p>{search || filter !== 'all' ? 'Coba nama lain atau tampilkan semua perangkat.' : 'Sambungkan USB phonefarm ke Mac. Board yang terbaca akan muncul otomatis di sini.'}</p><button className="button secondary" onClick={search || filter !== 'all' ? () => { setSearch(''); setFilter('all'); } : scan} disabled={!bridgeOnline}>{search || filter !== 'all' ? 'Tampilkan semua' : 'Pindai perangkat'}</button></div>}
+                {visible.length === 0 && <div className="empty-state"><span><Smartphone size={30} /></span><h3>{!ready ? 'Menghubungkan phonefarm…' : search || filter !== 'all' ? 'Tidak ada perangkat yang cocok' : 'Menunggu perangkat kamu'}</h3><p>{search || filter !== 'all' ? 'Coba nama lain atau tampilkan semua perangkat.' : 'Sambungkan USB phonefarm ke Mac. Board yang terbaca akan muncul otomatis di sini.'}</p><button className="button secondary" onClick={search || filter !== 'all' ? () => { setSearch(''); setFilter('all'); } : scan} disabled={!bridgeOnline || snapshot.offline}>{search || filter !== 'all' ? 'Tampilkan semua' : 'Pindai perangkat'}</button></div>}
               </div>
-              <div className="panel-bottom"><span><i className="dot green" />Pembaruan otomatis setiap 5 detik</span><button onClick={() => setSelected(new Set(online.map(d => d.serial)))} disabled={!online.length}><CheckCheck size={14} />Pilih semua</button></div>
+              <div className="panel-bottom"><span><i className={snapshot.offline ? 'dot gray' : 'dot green'} />{snapshot.offline ? 'Pemindaian perangkat dinonaktifkan' : 'Pembaruan otomatis setiap 5 detik'}</span><button onClick={() => setSelected(new Set(online.map(d => d.serial)))} disabled={!online.length}><CheckCheck size={14} />Pilih semua</button></div>
             </section>
             <aside className="insights-column">
               <section className="insight-card fleet-card"><div className="insight-heading"><h3>Status farm</h3><span className="tiny-badge">LOKAL</span></div><div className="fleet-number">{online.length}<span>/ {snapshot.expectedCount}</span></div><p>perangkat siap digunakan</p><div className="slot-map" aria-label={`${online.length} terhubung, ${missing} belum terdeteksi`}>
                 {Array.from({ length: Math.min(snapshot.expectedCount, 40) }, (_, index) => <span key={index} className={index < online.length ? 'connected-slot' : index < online.length + waiting.length ? 'waiting-slot' : ''} title={index < online.length ? 'Terhubung' : index < online.length + waiting.length ? 'Perlu izin' : 'Belum terdeteksi'} />)}
               </div><div className="fleet-legend"><span><i className="dot green" />Terhubung</span><span><i className="dot gray" />Belum terbaca</span></div><div className="fleet-note"><Info size={15} /><p>Slot yang belum terbaca belum tentu mati. Periksa daya, kabel, dan mode USB.</p></div><button className="text-link" onClick={() => setPage('connection')}>Lihat detail koneksi <ArrowUpRight size={15} /></button></section>
-              <section className="insight-card quick-guide"><span className="guide-icon"><Command size={20} /></span><h3>Kendalikan seperti HP biasa</h3><p>Layar perangkat adalah ruang kerja kamu.</p><div className="guide-row"><span>01</span><div><strong>Klik untuk mengetuk</strong><p>Buka aplikasi langsung dari layar.</p></div></div><div className="guide-row"><span>02</span><div><strong>Seret untuk menggeser</strong><p>Scroll atau tahan untuk long press.</p></div></div><div className="guide-row"><span>03</span><div><strong>Buka mode fokus</strong><p>Layar lebih besar, kontrol lebih lengkap.</p></div></div></section>
+              <section className="insight-card quick-guide"><span className="guide-icon"><Command size={20} /></span><h3>Kendalikan seperti HP biasa</h3><p>Layar perangkat adalah ruang kerja kamu.</p><div className="guide-row"><span>01</span><div><strong>Klik untuk mengetuk</strong><p>Buka aplikasi langsung dari layar.</p></div></div><div className="guide-row"><span>02</span><div><strong>Seret untuk menggeser</strong><p>Scroll atau tahan untuk long press.</p></div></div><div className="guide-row"><span>03</span><div><strong>Buka layar mengambang</strong><p>Geser jendela sambil memantau HP lain.</p></div></div></section>
               <div className="workspace-note"><span><Monitor size={15} />Dibuat untuk workspace Mac</span><p>Layar perangkat tersambung melalui layanan lokal di laptop ini.</p></div>
             </aside>
           </div>
         </>}
 
-        {page === 'connection' && <div className="connection-layout"><section className="settings-card"><div className="section-heading"><Cable size={19} /><div><h2>Jalur koneksi</h2><p>Informasi langsung dari laptop ini.</p></div></div><div className="connection-step"><span className="step-icon"><Monitor size={20} /></span><div><strong>Mac · layanan lokal</strong><span>{bridgeOnline ? 'Terhubung melalui localhost' : 'Layanan belum terhubung'}</span></div><span className="status-pill"><i className="dot green" />Aktif</span></div><div className="connection-step"><span className="step-icon"><Cable size={20} /></span><div><strong>Hub phonefarm</strong><span>{connection?.usb ? `${connection.usb.hubs} hub USB · ${connection.usb.serialPorts} pengendali serial` : 'Informasi USB sedang diperiksa…'}</span></div></div><div className="connection-step"><span className="step-icon"><Smartphone size={20} /></span><div><strong>Board Android</strong><span>{snapshot.detectedCount ?? devices.length} terdeteksi · {online.length} mendapat izin · {waiting.length} perlu izin</span></div></div><div className="connection-step"><span className="step-icon"><CheckCheck size={20} /></span><div><strong>Kunci ADB tambahan</strong><span>{connection?.keyLoaded ? 'Kunci Windows tersedia untuk koneksi board tanpa layar.' : 'Menggunakan identitas ADB lokal Mac.'}</span></div></div><BoxStatus box={connection?.box} /><div className="connection-list">{devices.map(device => <div key={device.serial}><div><strong>{device.name}</strong><span>{device.serial} · {device.model}</span></div><span className={`status-pill ${device.status !== 'device' ? 'warning-pill' : ''}`}>{statusLabel(device.status)}</span></div>)}</div></section><section className="settings-card help-card"><span className="guide-icon"><Info size={21} /></span><h2>Board belum muncul?</h2><p>Perangkat perlu terbaca di USB sebelum layar bisa dibuka di panel.</p><ol><li>Pastikan daya box dan board menyala.</li><li>Periksa kabel data serta port USB ke laptop.</li><li>Untuk box GenFarmer, pastikan slot aktif berada di USB Mode.</li><li>Jika statusnya “Perlu izin”, gunakan kunci ADB dari komputer yang sudah dipercaya board.</li></ol><p>Status slot menunjukkan board yang dikenali pengendali. Untuk HP yang belum muncul di USB Mac, periksa proses boot dan jalur data board. Pemeriksaan konektor internal dilakukan saat daya box dimatikan.</p><button className="button secondary" onClick={scan} disabled={scanning || !bridgeOnline}><RefreshCw size={15} />Pindai ulang</button></section></div>}
+        {page === 'connection' && !snapshot.offline && <NetworkSettings devices={devices} internet={snapshot.internet || {}} preferences={snapshot.networkPreferences || {}} api={api} onUpdate={setSnapshot} onError={onError} notify={notify} initialSerial={networkFocus} enabled={bridgeOnline} />}
+        {page === 'connection' && !snapshot.offline && <div className="connection-layout"><section className="settings-card"><div className="section-heading"><Cable size={19} /><div><h2>Jalur koneksi</h2><p>Informasi langsung dari laptop ini.</p></div></div><div className="connection-step"><span className="step-icon"><Monitor size={20} /></span><div><strong>Mac · layanan lokal</strong><span>{bridgeOnline ? 'Terhubung melalui localhost' : 'Layanan belum terhubung'}</span></div><span className="status-pill"><i className="dot green" />Aktif</span></div><div className="connection-step"><span className="step-icon"><Cable size={20} /></span><div><strong>Hub phonefarm</strong><span>{connection?.usb ? `${connection.usb.hubs} hub USB · ${connection.usb.serialPorts} pengendali serial` : 'Informasi USB sedang diperiksa…'}</span></div></div><div className="connection-step"><span className="step-icon"><Smartphone size={20} /></span><div><strong>Board Android</strong><span>{snapshot.detectedCount ?? devices.length} terdeteksi · {online.length} mendapat izin · {waiting.length} perlu izin</span></div></div><div className="connection-step"><span className="step-icon"><CheckCheck size={20} /></span><div><strong>Kunci ADB tambahan</strong><span>{connection?.keyLoaded ? 'Kunci Windows tersedia untuk koneksi board tanpa layar.' : 'Menggunakan identitas ADB lokal Mac.'}</span></div></div><BoxStatus box={connection?.box} /><div className="connection-list">{devices.map(device => <div key={device.serial}><div><strong>{device.name}</strong><span>{device.serial} · {device.model}</span></div><span className={`status-pill ${device.status !== 'device' ? 'warning-pill' : ''}`}>{statusLabel(device.status)}</span></div>)}</div></section><section className="settings-card help-card"><span className="guide-icon"><Info size={21} /></span><h2>Board belum muncul?</h2><p>Perangkat perlu terbaca di USB sebelum layar bisa dibuka di panel.</p><ol><li>Pastikan daya box dan board menyala.</li><li>Periksa kabel data serta port USB ke laptop.</li><li>Untuk box GenFarmer, pastikan slot aktif berada di USB Mode.</li><li>Jika statusnya “Perlu izin”, gunakan kunci ADB dari komputer yang sudah dipercaya board.</li></ol><p>Status slot menunjukkan board yang dikenali pengendali. Untuk HP yang belum muncul di USB Mac, periksa proses boot dan jalur data board. Pemeriksaan konektor internal dilakukan saat daya box dimatikan.</p><button className="button secondary" onClick={scan} disabled={scanning || !bridgeOnline || snapshot.offline}><RefreshCw size={15} />Pindai ulang</button></section></div>}
 
         {page === 'settings' && <div className="connection-layout"><section className="settings-card"><div className="section-heading"><Settings2 size={19} /><div><h2>Susunan phonefarm</h2><p>Jumlah slot membantu kamu melihat berapa board yang belum terbaca.</p></div></div><form className="settings-form" onSubmit={saveSlots}><label htmlFor="slot-count">Total slot perangkat</label><div><input id="slot-count" type="number" min="1" max="200" value={slotCount} onChange={event => setSlotCount(event.target.value)} /><button className="button primary" disabled={!bridgeOnline}>Simpan</button></div><p>Angka ini adalah kapasitas farm, bukan jumlah HP yang sedang terhubung.</p></form><div className="settings-divider" /><h3>Nama perangkat</h3><p className="muted">Beri nama sesuai posisi board supaya mudah dikenali.</p><div className="connection-list">{devices.map(device => <div key={device.serial}><div><strong>{device.name}</strong><span>{device.serial}</span></div><IconButton label={`Ganti nama ${device.name}`} onClick={() => { setRename(device); setNewName(device.name); }}><Pencil size={15} /></IconButton></div>)}{!devices.length && <p className="muted">Perangkat akan muncul di sini setelah tersambung.</p>}</div></section><section className="settings-card help-card"><span className="guide-icon"><Monitor size={21} /></span><h2>Website sekarang.<br />Aplikasi Mac berikutnya.</h2><p>Versi web ini berjalan di Mac kamu dan tersambung langsung ke phonefarm. Versi aplikasi Mac direncanakan untuk tahap berikutnya.</p><div className="native-note"><strong>Versi saat ini</strong><span>Panel web lokal · v0.1.0</span><span>Layar langsung dan kontrol perangkat</span></div></section></div>}
-        <footer className="main-footer"><span>phonefarm<span className="footer-dot">•</span>Ruang kendali pribadi</span><span><Usb size={12} />USB bridge aktif di Mac ini</span></footer>
+        <footer className="main-footer"><span>phonefarm<span className="footer-dot">•</span>Ruang kendali pribadi</span><span><Usb size={12} />{snapshot.offline ? 'Mode tanpa perangkat · simulasi lokal' : 'USB bridge aktif di Mac ini'}</span></footer>
       </main>
     </div>
 
-    {focus && <div className="modal-backdrop" role="presentation" onClick={() => setFocus(null)}><section className="focus-modal" role="dialog" aria-modal="true" aria-label="Kontrol perangkat" onClick={event => event.stopPropagation()}>
-      <div className="focus-heading"><div><span className="eyebrow">MODE FOKUS</span><h2>{focusedDevice?.name || 'Perangkat terputus'}</h2></div><IconButton label="Tutup mode fokus" onClick={() => setFocus(null)}><X size={21} /></IconButton></div>
-      {focusedDevice ? <div className="focus-body"><div className="focus-phone"><Screen device={focusedDevice} enabled={focusedDevice.status === 'device' && pageVisible} large onInput={send} onError={onError} /><Navigation device={focusedDevice} onInput={send} onError={onError} /></div><aside className="focus-tools"><span className="status-pill"><i className={`dot ${focusedDevice.status === 'device' ? 'green' : 'gray'}`} />{statusLabel(focusedDevice.status)}</span><h3>{focusedDevice.model}</h3><dl><dt>Nomor seri</dt><dd>{focusedDevice.serial}</dd><dt>Sistem</dt><dd>{focusedDevice.android ? `Android ${focusedDevice.android}` : 'Belum tersedia'}</dd><dt>Ukuran layar</dt><dd>{focusedDevice.width ? `${focusedDevice.width} × ${focusedDevice.height}` : 'Belum tersedia'}</dd></dl><div className="focus-control-buttons"><button onClick={() => { setTextModal(focusedDevice); setText(''); }} disabled={focusedDevice.status !== 'device'}><Keyboard size={17} />Kirim teks</button><button onClick={() => screenshot(focusedDevice)} disabled={focusedDevice.status !== 'device'}><Download size={17} />Tangkapan layar</button><button onClick={() => send(focusedDevice.serial, { type: 'key', key: 'wake' }).catch(onError)} disabled={focusedDevice.status !== 'device'}><Sun size={17} />Bangunkan layar</button><button onClick={() => send(focusedDevice.serial, { type: 'key', key: 'sleep' }).catch(onError)} disabled={focusedDevice.status !== 'device'}><Moon size={17} />Tidurkan layar</button><div className="volume-controls"><button onClick={() => send(focusedDevice.serial, { type: 'key', key: 'volumeDown' }).catch(onError)} disabled={focusedDevice.status !== 'device'}><Volume1 size={17} />Volume −</button><button onClick={() => send(focusedDevice.serial, { type: 'key', key: 'volumeUp' }).catch(onError)} disabled={focusedDevice.status !== 'device'}><Volume2 size={17} />Volume +</button></div></div>{sync && selected.has(focusedDevice.serial) && selected.size > 1 && <div className="focus-sync-note"><CheckCheck size={16} />Kontrol sinkron aktif untuk {selected.size} perangkat terpilih.</div>}<p className="focus-hint">Klik dan seret pada layar.<br /><kbd>Backspace</kbd> kembali · <kbd>Home</kbd> beranda<br /><kbd>Esc</kbd> tutup mode fokus</p></aside></div> : <div className="empty-state"><Cable size={32} /><h3>Board tidak terhubung</h3><p>Sambungkan kembali board ke USB. Panel akan memperbarui daftar otomatis.</p></div>}
-    </section></div>}
+    {windows.map((serial, index) => {
+      const device = devices.find(value => value.serial === serial);
+      return <FloatingWindow key={serial} serial={serial} title={device?.name || 'Perangkat terputus'} index={index} active={focus === serial} onActivate={() => setFocus(serial)} onClose={() => closeScreen(serial)}>
+        {device ? <>
+          <div className="floating-screen-stage"><Screen device={device} enabled={device.status === 'device' && pageVisible} large onInput={send} onError={onError} /></div>
+          <Navigation device={device} onInput={send} onError={onError} />
+          <div className="floating-controls">
+            <button className="button secondary" onClick={() => rotate(device)} disabled={device.status !== 'device' || rotating.has(serial)}><RotateCw size={15} className={rotating.has(serial) ? 'spin' : ''} />Rotate 90°</button>
+            <button className="button secondary" title="Kembalikan rotasi mengikuti aplikasi dan sensor HP" onClick={() => rotate(device, 'auto')} disabled={device.status !== 'device' || rotating.has(serial)}>Otomatis</button>
+            <IconButton label={`Kirim teks ke ${device.name}`} onClick={() => { setTextModal(device); setText(''); }} disabled={device.status !== 'device'}><Keyboard size={17} /></IconButton>
+            <IconButton label={`Tangkapan layar ${device.name}`} onClick={() => screenshot(device)} disabled={device.status !== 'device'}><Download size={17} /></IconButton>
+            <IconButton label={`Bangunkan ${device.name}`} onClick={() => send(serial, { type: 'key', key: 'wake' }).catch(onError)} disabled={device.status !== 'device'}><Sun size={17} /></IconButton>
+            <IconButton label={`Tidurkan ${device.name}`} onClick={() => send(serial, { type: 'key', key: 'sleep' }).catch(onError)} disabled={device.status !== 'device'}><Moon size={17} /></IconButton>
+            <IconButton label={`Volume turun ${device.name}`} onClick={() => send(serial, { type: 'key', key: 'volumeDown' }).catch(onError)} disabled={device.status !== 'device'}><Volume1 size={17} /></IconButton>
+            <IconButton label={`Volume naik ${device.name}`} onClick={() => send(serial, { type: 'key', key: 'volumeUp' }).catch(onError)} disabled={device.status !== 'device'}><Volume2 size={17} /></IconButton>
+          </div>
+          <div className="floating-status"><span><i className={`dot ${device.status === 'device' ? 'green' : 'gray'}`} />{statusLabel(device.status)}</span><span>{sync && selected.has(serial) && selected.size > 1 ? `Kontrol sinkron: ${selected.size} HP` : device.model}</span></div>
+        </> : <div className="floating-disconnected">Perangkat terputus. Menunggu tersambung kembali…</div>}
+      </FloatingWindow>;
+    })}
     {textModal && <div className="modal-backdrop nested-modal"><form className="small-modal" role="dialog" aria-modal="true" aria-label="Kirim teks" onSubmit={sendText}><div className="small-modal-heading"><h2>Kirim teks</h2><IconButton label="Tutup" onClick={() => setTextModal(null)}><X size={19} /></IconButton></div><p>Klik kolom teks di layar {textModal.name} terlebih dahulu.</p><textarea autoFocus value={text} onChange={event => setText(event.target.value)} placeholder="Tulis teks yang ingin dikirim…" maxLength={500} rows={5} /><span className="input-help">Mendukung huruf Latin, angka, dan simbol.</span><button className="button primary" disabled={!text.trim() || sending}>{sending ? 'Mengirim…' : 'Kirim ke perangkat'}<ArrowUpRight size={15} /></button></form></div>}
     {rename && <div className="modal-backdrop nested-modal"><form className="small-modal" role="dialog" aria-modal="true" aria-label="Ganti nama perangkat" onSubmit={saveName}><div className="small-modal-heading"><h2>Nama perangkat</h2><IconButton label="Tutup" onClick={() => setRename(null)}><X size={19} /></IconButton></div><p>{rename.serial}</p><input autoFocus value={newName} onChange={event => setNewName(event.target.value)} maxLength={40} required /><button className="button primary" disabled={!newName.trim()}>Simpan nama<Check size={15} /></button></form></div>}
     {toast && <div className={`toast ${toast.error ? 'toast-error' : ''}`} role="status">{toast.error ? <AlertCircle size={18} /> : <Check size={18} />}<span>{toast.message}</span><button onClick={() => setToast(null)} aria-label="Tutup notifikasi"><X size={15} /></button></div>}

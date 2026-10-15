@@ -5,6 +5,7 @@ import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { JpegParser } from './core.mjs';
 import { adb, adbProcess } from './adb.mjs';
+import { getDisplay } from './display.mjs';
 
 const exec = promisify(execFile);
 const binary = name => process.env[`${name.toUpperCase()}_PATH`] || (existsSync(`/opt/homebrew/bin/${name}`) ? `/opt/homebrew/bin/${name}` : name);
@@ -62,6 +63,7 @@ export class StreamManager {
     await adb(['-s', session.serial, 'push', info.path, session.jar]);
     if (!session.active) { await this.cleanup(session); return; }
     await adb(['-s', session.serial, 'shell', 'input', 'keyevent', '224']);
+    session.display = await getDisplay(session.serial);
     if (!session.active) { await this.cleanup(session); return; }
     session.forward = Number((await adb(['-s', session.serial, 'forward', 'tcp:0', `localabstract:scrcpy_${scid}`])).trim());
     if (!session.active) { await this.cleanup(session); return; }
@@ -130,6 +132,12 @@ export class StreamManager {
   }
   disconnectMissing(connectedSerials) {
     for (const session of this.sessions.values()) if (!connectedSerials.has(session.serial)) this.fail(session, 'Board terputus dari USB.');
+  }
+  reconcileDisplay(serial, display) {
+    const session = this.sessions.get(serial);
+    // The MJPEG encoder retains its initial dimensions. Reconnect on size changes
+    // so landscape/portrait transitions never stretch or crop subsequent frames.
+    if (session?.display && (session.display.width !== display.width || session.display.height !== display.height)) this.stop(session);
   }
   close() { for (const session of [...this.sessions.values()]) this.stop(session); }
 }

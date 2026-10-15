@@ -31,7 +31,15 @@ def main() -> None:
     tone = bank._tone(data.get("tone"))
     hindari = [str(t) for t in data.get("hindari") or [] if t][:2000]
     konteks = str(data.get("konteks") or "")[:5000]
-    suasana = bank.deteksi_suasana(f"{caption}\n{konteks}" if konteks else caption)
+    # Caption owns the context. OCR can contain an adjacent post, counters or
+    # short artifacts such as "F1"; it must not turn haze news into sports.
+    suasana = bank.deteksi_suasana(caption)
+    if not caption.strip():
+        suasana = bank.deteksi_suasana(konteks)
+    elif konteks and suasana not in bank.penilai.SUASANA_DUKA:
+        serius = bank.deteksi_suasana(konteks)
+        if serius in bank.penilai.SUASANA_DUKA:
+            suasana = serius
     hasil: list[str] = []
     for _ in range(6):
         for teks in bank.buat_komentar(caption, count - len(hasil), tone, hindari=hindari + hasil, suasana=suasana):

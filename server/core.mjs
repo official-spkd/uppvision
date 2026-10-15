@@ -2,7 +2,7 @@ export function parseDevices(output) {
   return output.split('\n').filter(line => line.trim() && !line.startsWith('List of') && !line.startsWith('*')).map(line => {
     const [serial, status, ...parts] = line.trim().split(/\s+/);
     const fields = Object.fromEntries(parts.filter(p => p.includes(':')).map(p => { const i = p.indexOf(':'); return [p.slice(0, i), p.slice(i + 1)]; }));
-    return { serial, status, model: fields.model?.replaceAll('_', '-') || 'Android', product: fields.product || '', transport: fields.usb ? 'USB' : 'Wi-Fi' };
+    return { serial, status, model: fields.model?.replaceAll('_', '-') || 'Android', product: fields.product || '', transport: fields.usb ? 'USB' : 'Wi-Fi', transportId: fields.transport_id || null };
   }).filter(d => d.serial && ['device', 'unauthorized', 'offline', 'recovery', 'sideload'].includes(d.status));
 }
 
