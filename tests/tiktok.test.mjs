@@ -26,16 +26,16 @@ test('comment rows are read by display name; the send button sits on the compose
   assert.equal(tt.composer(ui('<node class="android.widget.EditText" text="Add comment..." bounds="[216,1620][558,1713]"/>')).placeholder, true);
 });
 test('video identity uses owner, date and caption; the account switcher ignores Close', () => {
-  const nodes = ui(`<node class="android.widget.Button" text="tv.mediagaul" bounds="[36,1373][352,1439]"/><node text="· 09-14" bounds="[364,1380][515,1437]"/>
+  const nodes = ui(`<node class="android.widget.Button" text="akun.contoh70" bounds="[36,1373][352,1439]"/><node text="· 09-14" bounds="[364,1380][515,1437]"/>
     <node text="DPR setujui anggaran Kemenkeu.…more" clickable="true" bounds="[36,1457][840,1565]"/>
     <node content-desc="Read or add comments. Add 1st comments" bounds="[918,1001][1080,1163]"/>`);
-  const info = tt.videoInfo(nodes, 'tv.mediagaul');
+  const info = tt.videoInfo(nodes, 'akun.contoh70');
   assert.equal(info.date, '09-14'); assert.equal(info.caption, 'DPR setujui anggaran Kemenkeu'); assert.equal(info.more, true);
   assert.equal(tt.commentCount(nodes), 0);
   assert.throws(() => tt.videoFingerprint(tt.videoInfo(nodes, 'someone.else'), 'someone.else'));
   const sheet = ui(`<node text="Switch account" bounds="[350,1185][730,1251]"/><node content-desc="Close" clickable="true" bounds="[936,1152][1056,1284]"/>
-    <node content-desc="dpdpricaeh" clickable="true" selected="true" bounds="[0,1320][1080,1536]"/><node content-desc="Add account" clickable="true" bounds="[0,1536][1080,1752]"/>`);
-  assert.deepEqual(tt.switcherAccounts(sheet).map(a => a.username), ['dpdpricaeh']);
+    <node content-desc="akun.contoh96" clickable="true" selected="true" bounds="[0,1320][1080,1536]"/><node content-desc="Add account" clickable="true" bounds="[0,1536][1080,1752]"/>`);
+  assert.deepEqual(tt.switcherAccounts(sheet).map(a => a.username), ['akun.contoh96']);
 });
 import { TikTokManager } from '../server/tiktok.mjs';
 test('TikTok uses job quotas and holds unresolved sends without scanning history on the HP', () => {
@@ -73,8 +73,8 @@ test('playback is read from TikTok\'s own audio player; other apps and missing p
   assert.equal(await m.audioPlaying('s'), null, 'no player: fall back to screenshots');
 });
 test('a video without a caption does not take the Share button label as its caption', () => {
-  const nodes = ui(`<node class="android.widget.Button" text="tv.mediagaul" bounds="[36,1500][352,1566]"/><node text="· 09-12" bounds="[364,1507][515,1564]"/>
+  const nodes = ui(`<node class="android.widget.Button" text="akun.contoh70" bounds="[36,1500][352,1566]"/><node text="· 09-12" bounds="[364,1507][515,1564]"/>
     <node text="Share" bounds="[930,1580][1060,1630]"/><node text="12" bounds="[960,1640][1030,1690]"/>`);
-  const info = tt.videoInfo(nodes, 'tv.mediagaul');
+  const info = tt.videoInfo(nodes, 'akun.contoh70');
   assert.equal(info.caption, ''); assert.equal(info.date, '09-12');
 });

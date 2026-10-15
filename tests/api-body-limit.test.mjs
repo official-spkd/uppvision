@@ -8,7 +8,7 @@ import { JSON_BODY_LIMIT, JSON_BODY_LIMIT_BYTES } from '../server/body-limit.mjs
 function largestPlan() {
   const links = Array.from({ length: 20 }, (_, i) => `https://www.instagram.com/p/${String(i).padStart(2, '0')}${'A'.repeat(62)}/`);
   const accounts = Array.from({ length: 100 }, (_, i) => ({
-    serial: 'R5CT7076ZQP', username: `account.number.${String(i).padStart(3, '0')}`,
+    serial: 'serial-contoh-01', username: `account.number.${String(i).padStart(3, '0')}`,
     target: links.join('\n'), posts: 20, comments: 100, tone: 'positif',
   }));
   return { startMode: 'serentak', accounts };

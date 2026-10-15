@@ -1023,7 +1023,7 @@ export class InstagramManager {
     // "Add a comment for X" names the post owner, not the logged-in author.
     // In that UI variant, fall back to the mark left by this operation's account check.
     const proof = this.verifiedAccounts.get(serial);
-    // Instagram clips a long owner name in the hint ("Add a comment for tvrakyat.offi…").
+    // Instagram clips a long owner name in the hint ("Add a comment for akun.contoh104.offi…").
     // Only trust the prefix when the UI itself marked it truncated, so a shorter real name never matches by accident.
     const ownerMatches = composer.target === target || Boolean(composer.targetTruncated && composer.target && target.startsWith(composer.target));
     return proof?.username === account && Date.now() - proof.at < PROOF_TTL_MS &&

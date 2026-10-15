@@ -286,7 +286,7 @@ export function composerAccount(nodes) {
   const field = raw ? { ...raw, text: raw.text || (childTexts.length === 1 ? childTexts[0] : childTexts.length ? '[Kolom berisi teks yang belum dapat dibaca]' : '') } : undefined;
   const match = field?.text?.match(/(?:comment(?:ing)? as|berkomentar sebagai|tambahkan komentar sebagai)\s+@?([a-zA-Z0-9_.]+)/i);
   // Instagram truncates a long owner name with an ellipsis inside the narrow composer hint
-  // ("Add a comment for tvrakyat.offi…"). Keep the visible prefix and flag that it is partial.
+  // ("Add a comment for akun.contoh104.offi…"). Keep the visible prefix and flag that it is partial.
   const target = field?.text?.match(/^(?:add a comment for|tambahkan komentar untuk)\s+@?([a-zA-Z0-9_.]+?)(?:\.{3}|…)?$/i);
   const targetTruncated = /(?:\.{3}|…)\s*$/.test(field?.text || '');
   return { field, username: match?.[1]?.replace(/\.+$/, '').toLowerCase() || null,

@@ -199,7 +199,7 @@ test('the logged-out dialog is recognised with the account it names, and other d
   const notice = loggedOutDialog(loggedOutNodes());
   assert.equal(notice.username, 'tv.nalarberita');
   assert.equal(notice.dismiss.text, 'OK');
-  assert.equal(loggedOutDialog(loggedOutNodes('tv.infonow')).username, 'tv.infonow');
+  assert.equal(loggedOutDialog(loggedOutNodes('akun.contoh94')).username, 'akun.contoh94');
   // Dialog lain dengan bentuk serupa tidak boleh dianggap pemberitahuan keluar.
   assert.equal(loggedOutDialog([{ 'resource-id': id('igds_headline_body'), text: 'Your followers might see this' }]), null);
   assert.equal(loggedOutDialog([]), null);

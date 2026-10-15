@@ -12,7 +12,7 @@ export function instagramTarget(value, { allowPostLinks = true } = {}) {
     let url;
     try { url = new URL(input); } catch {}
     // Instagram hands out pasted links with the profile name in front of the post type
-    // (…/tvrakyat.official/reel/Dee3DCPhqe-/) about as often as the short form (…/reel/…).
+    // (…/akun.contoh21/reel/Dee3DCPhqe-/) about as often as the short form (…/reel/…).
     // Both open the same post, so the optional name segment is accepted and dropped;
     // the stored target is always the short canonical form. The segment may not start
     // with a dot, so a bare ".." can never smuggle a different path.

@@ -7,17 +7,17 @@ import { parseUi } from '../server/instagram-core.mjs';
 import { pageIdentity, ownIdentity, composer, postIdentity, verifyDraft, sendButton, sameReel, renderedComment } from '../server/live/facebook-core.mjs';
 import { FacebookAdapter } from '../server/live/facebook.mjs';
 const ui = nodes => parseUi(`<hierarchy>${nodes.replaceAll('<node ', '<node package="com.facebook.katana" ')}</hierarchy>`);
-const pageUi = ui('<node content-desc="Report Page"/><node text="TV Rakyat’s Page link"/><node text="https://www.facebook.com/tvrakyatofficial"/>');
-const page = pageIdentity(pageUi, 'tvrakyatofficial');
+const pageUi = ui('<node content-desc="Report Page"/><node text="TV Rakyat’s Page link"/><node text="https://www.facebook.com/akun.contoh01"/>');
+const page = pageIdentity(pageUi, 'akun.contoh01');
 
 test('Facebook requires explicit Page metadata and matching URL, not professional category or followers', () => {
   assert.equal(page.targetType, 'page');
   assert.equal(page.targetLabel, 'TV Rakyat');
-  assert.throws(() => pageIdentity(ui('<node text="News &amp; media website"/><node text="1.9K followers"/><node text="https://www.facebook.com/tvrakyatofficial"/>'), 'tvrakyatofficial'), /belum terbukti/);
-  assert.throws(() => pageIdentity(ui('<node content-desc="Report profile"/><node text="TV Rakyat’s profile link"/><node text="https://www.facebook.com/tvrakyatofficial"/>'), 'tvrakyatofficial'), /belum terbukti/);
+  assert.throws(() => pageIdentity(ui('<node text="News &amp; media website"/><node text="1.9K followers"/><node text="https://www.facebook.com/akun.contoh01"/>'), 'akun.contoh01'), /belum terbukti/);
+  assert.throws(() => pageIdentity(ui('<node content-desc="Report profile"/><node text="TV Rakyat’s profile link"/><node text="https://www.facebook.com/akun.contoh01"/>'), 'akun.contoh01'), /belum terbukti/);
   assert.throws(() => pageIdentity(pageUi, 'other.page'), /tidak cocok/);
   const foreign = pageUi.map(node => ({ ...node, package: 'com.other.app' }));
-  assert.throws(() => pageIdentity(foreign, 'tvrakyatofficial'), /belum terbukti/);
+  assert.throws(() => pageIdentity(foreign, 'akun.contoh01'), /belum terbukti/);
 });
 test('Facebook own account ID comes from its own profile link, not Instagram handle or display name', () => {
   const nodes = ui('<node text="Your profile link"/><node text="https://www.facebook.com/demo.account"/><node content-desc="Copy Demo Account’s link"/>');

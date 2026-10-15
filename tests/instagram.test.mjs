@@ -652,7 +652,7 @@ const snackbar = text => [{ 'resource-id': id('snackbar_message'), text, bounds:
 // Dialog konfirmasi repost pertama, disalin dari dump asli Samsung 01.
 const repostDialogNodes = () => [
   { 'resource-id': id('igds_promo_dialog_headline'), bounds: '[48,752][1032,1728]' },
-  { 'resource-id': id('igds_headline_headline'), text: "You reposted tvrakyat.official's reel", bounds: '[144,824][936,1093]' },
+  { 'resource-id': id('igds_headline_headline'), text: "You reposted akun.contoh21's reel", bounds: '[144,824][936,1093]' },
   { 'resource-id': id('igds_headline_body'), 'content-desc': 'Your followers might see this in their feeds', bounds: '[144,1117][936,1308]' },
   { 'resource-id': id('igds_headline_primary_action_button'), 'content-desc': 'Close', clickable: 'true', bounds: '[144,1380][936,1512]' },
   { 'resource-id': id('igds_headline_secondary_action_text_button'), 'content-desc': 'Undo', clickable: 'true', bounds: '[144,1524][936,1656]' },
@@ -710,7 +710,7 @@ test('repost is confirmed by its own dialog or snackbar, and other dialogs are n
   assert.equal(repostedNotice([]), false);
   assert.equal(snackbarMessage([]), '');
   // Dialog konfirmasi repost pertama adalah sinyal sukses yang sah, bukan penghalang biasa.
-  assert.equal(repostDialog(repostDialogNodes()).headline, "You reposted tvrakyat.official's reel");
+  assert.equal(repostDialog(repostDialogNodes()).headline, "You reposted akun.contoh21's reel");
   assert.equal(repostConfirmed(repostDialogNodes()), true);
   assert.equal(repostDialog([{ 'resource-id': id('igds_headline_headline'), text: 'Collect the posts you love' }]), null,
     'dialog lain tidak boleh dianggap repost');
@@ -719,13 +719,13 @@ test('repost is confirmed by its own dialog or snackbar, and other dialogs are n
 test('share reads contacts in screen order and ignores rows clipped by the sheet edge', () => {
   const nodes = shareSheet(
     shareTile('dpp_perisai', { bounds: '[360,895][720,1291]' }),
-    shareTile('TvKocak', { bounds: '[0,895][360,1291]' }),
-    shareTile('TvTepercayaDanTerkini', { bounds: '[720,895][1080,1291]' }),
+    shareTile('akun.contoh107', { bounds: '[0,895][360,1291]' }),
+    shareTile('akun.contoh10', { bounds: '[720,895][1080,1291]' }),
     // Baris paling bawah terpotong tepi lembar: titik tengahnya bisa jatuh di tombol Kirim.
     shareTile('Rizky.PRI', { bounds: '[0,1687][360,1776]' }));
-  assert.deepEqual(shareContacts(nodes).map(c => c.name), ['TvKocak', 'dpp_perisai', 'TvTepercayaDanTerkini']);
+  assert.deepEqual(shareContacts(nodes).map(c => c.name), ['akun.contoh107', 'dpp_perisai', 'akun.contoh10']);
   assert.equal(shareContacts(nodes)[0].selected, false);
-  assert.equal(shareContacts(shareSheet(shareTile('TvKocak', { selected: true })))[0].selected, true);
+  assert.equal(shareContacts(shareSheet(shareTile('akun.contoh107', { selected: true })))[0].selected, true);
   assert.deepEqual(shareContacts([]), []);
 });
 test('save taps only when the bookmark says it is unsaved and verifies the flip', async () => {
@@ -746,17 +746,17 @@ test('repost waits for the Reposted snackbar and an unconfirmed tap is never cal
 });
 test('share picks the first visible contact, verifies the selection and needs the sheet to close', async () => {
   const post = actionBar();
-  const sheet = shareSheet(shareTile('dpp_perisai', { bounds: '[360,895][720,1291]' }), shareTile('TvKocak', { bounds: '[0,895][360,1291]' }));
-  const { manager, taps } = actionManager([sheet, shareSheet(shareTile('TvKocak', { selected: true }), sendNode()), post]);
+  const sheet = shareSheet(shareTile('dpp_perisai', { bounds: '[360,895][720,1291]' }), shareTile('akun.contoh107', { bounds: '[0,895][360,1291]' }));
+  const { manager, taps } = actionManager([sheet, shareSheet(shareTile('akun.contoh107', { selected: true }), sendNode()), post]);
   const result = await manager.sharePost('phone1', post, 'account.one');
   assert.equal(result.status, 'sent');
-  assert.equal(result.to, 'TvKocak', 'kontak pertama yang terlihat, bukan yang pertama di XML');
+  assert.equal(result.to, 'akun.contoh107', 'kontak pertama yang terlihat, bukan yang pertama di XML');
   assert.equal(taps[0]['resource-id'], id('row_feed_button_share'));
-  assert.equal(taps[1]['content-desc'], 'TvKocak Chat not selected');
+  assert.equal(taps[1]['content-desc'], 'akun.contoh107 Chat not selected');
   assert.equal(taps[2]['resource-id'], id('direct_send_button_multi_select'));
   assert.equal(taps.length, 3);
   // Kirim yang tidak menutup lembar bukan bukti kiriman.
-  const stuck = actionManager([sheet, shareSheet(shareTile('TvKocak', { selected: true }), sendNode())]);
+  const stuck = actionManager([sheet, shareSheet(shareTile('akun.contoh107', { selected: true }), sendNode())]);
   assert.equal((await stuck.manager.sharePost('phone1', post, 'account.one')).status, 'unverified');
 });
 test('share is skipped, not guessed, when there is no contact or only our own account', async () => {
@@ -785,7 +785,7 @@ test('saving closes the collection sheet before the next action', async () => {
 test('the reel-inside-the-feed layout is recognised and a normal post screen is not', () => {
   // Disalin dari dump asli Samsung 06: reel diputar di Home Feed, tanpa baris aksi.
   const inline = [
-    { 'resource-id': id('row_feed_photo_profile_name'), text: 'tvrakyat.official', bounds: '[147,643][948,719]' },
+    { 'resource-id': id('row_feed_photo_profile_name'), text: 'akun.contoh21', bounds: '[147,643][948,719]' },
     { 'resource-id': id('media_group'), clickable: 'true', bounds: '[0,643][1080,1632]' },
     { 'resource-id': id('feed_preview_keep_watching_button'), text: 'Tap to watch more reels', clickable: 'true', bounds: '[275,1191][806,1335]' },
     { 'resource-id': id('feed_tab'), 'content-desc': 'Home', bounds: '[0,1632][216,1776]' },
@@ -934,7 +934,7 @@ test('a retried step reopens the post without sending the contact a second messa
   const fake = fakeRunner(), shares = [];
   fake.manager.savePost = async (serial, nodes) => ({ status: 'saved', nodes });
   fake.manager.repostPost = async (serial, nodes) => ({ status: 'reposted', nodes });
-  fake.manager.sharePost = async (serial, nodes, account) => { shares.push(account); return { status: 'sent', to: 'TvKocak', nodes }; };
+  fake.manager.sharePost = async (serial, nodes, account) => { shares.push(account); return { status: 'sent', to: 'akun.contoh107', nodes }; };
   const thread = fake.manager.openThread;
   let reads = 0;
   fake.manager.openThread = async (...args) => { if (++reads === 1) throw new NetworkError('Temporary offline'); return thread(...args); };

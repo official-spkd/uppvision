@@ -60,13 +60,13 @@ test('direct URL canonicalization retains shortcode case, strips tracking and re
 });
 test('a pasted link that carries the profile name in front of the post type is accepted and canonicalised', () => {
   // The form Instagram's own app puts on the clipboard; it used to be rejected outright.
-  assert.deepEqual(instagramTarget('https://www.instagram.com/tvrakyat.official/reel/Dee3DCPhqe-/'), { kind: 'post', shortcode: 'Dee3DCPhqe-', target: 'https://www.instagram.com/reel/Dee3DCPhqe-/' });
-  assert.deepEqual(instagramTarget('https://www.instagram.com/tvrakyat.official/p/DeYYk_yNvkE/'), { kind: 'post', shortcode: 'DeYYk_yNvkE', target: URL });
+  assert.deepEqual(instagramTarget('https://www.instagram.com/akun.contoh21/reel/Dee3DCPhqe-/'), { kind: 'post', shortcode: 'Dee3DCPhqe-', target: 'https://www.instagram.com/reel/Dee3DCPhqe-/' });
+  assert.deepEqual(instagramTarget('https://www.instagram.com/akun.contoh21/p/DeYYk_yNvkE/'), { kind: 'post', shortcode: 'DeYYk_yNvkE', target: URL });
   assert.equal(instagramTarget('https://instagram.com/some.one/reel/DeYYk_yNvkE?igsh=x').shortcode, 'DeYYk_yNvkE');
-  const both = instagramTargets(`https://www.instagram.com/tvrakyat.official/reel/DeYYk_yNvkE/\nhttps://www.instagram.com/p/DeYYk_yNvkE/`);
+  const both = instagramTargets(`https://www.instagram.com/akun.contoh21/reel/DeYYk_yNvkE/\nhttps://www.instagram.com/p/DeYYk_yNvkE/`);
   assert.equal(both.targets.length, 1, 'the same post pasted in both shapes must count once');
-  assert.equal(effectivePostCount({ target: 'https://www.instagram.com/tvrakyat.official/reel/Dee3DCPhqe-/', posts: 9 }), 1);
-  for (const value of ['https://instagram.com/tvrakyat.official/stories/DeYYk_yNvkE/', 'https://evil.test/tvrakyat.official/reel/DeYYk_yNvkE/', 'https://instagram.com/../p/DeYYk_yNvkE/x/']) assert.throws(() => instagramTarget(value), value);
+  assert.equal(effectivePostCount({ target: 'https://www.instagram.com/akun.contoh21/reel/Dee3DCPhqe-/', posts: 9 }), 1);
+  for (const value of ['https://instagram.com/akun.contoh21/stories/DeYYk_yNvkE/', 'https://evil.test/akun.contoh21/reel/DeYYk_yNvkE/', 'https://instagram.com/../p/DeYYk_yNvkE/x/']) assert.throws(() => instagramTarget(value), value);
   assert.equal(isInstagramPostTarget(URL), true);
   assert.equal(isInstagramPostTarget('invalid target'), false);
   assert.equal(targetLabel(URL), URL);
