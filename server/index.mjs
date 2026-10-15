@@ -247,7 +247,7 @@ app.get('/api/connection', async (req, res) => {
   const results = await Promise.allSettled([usbOverview(), boxStatus()]);
   const usb = results[0].status === 'fulfilled' ? results[0].value : null;
   const box = results[1].status === 'fulfilled' ? results[1].value : { available: false };
-  res.json({ ...snapshot(), usb, box, keyLoaded: Boolean(adbEnv.ADB_VENDOR_KEYS), bridge: 'ADB + scrcpy', host: '127.0.0.1', platform: process.platform });
+  res.json({ ...snapshot(), usb, box, bridge: 'ADB + scrcpy', host: '127.0.0.1', platform: process.platform });
 });
 async function saveSettings() {
   await mkdir(dirname(statePath), { recursive: true });

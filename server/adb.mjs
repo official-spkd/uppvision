@@ -1,14 +1,12 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { parseDevices, inputArgs } from './core.mjs';
 
 const exec = promisify(execFile);
 export const adbPath = process.env.ADB_PATH || (existsSync('/opt/homebrew/bin/adb') ? '/opt/homebrew/bin/adb' : 'adb');
-const importedKey = join(homedir(), '.android/phonefarm-keys/windows.adb_key');
-export const adbEnv = { ...process.env, ADB_LIBUSB: process.env.ADB_LIBUSB || '1', ...(existsSync(importedKey) && !process.env.ADB_VENDOR_KEYS ? { ADB_VENDOR_KEYS: importedKey } : {}) };
+// Identitas ADB diambil dari pengaturan ADB itu sendiri; layanan tidak menambahkannya sendiri.
+export const adbEnv = { ...process.env, ADB_LIBUSB: process.env.ADB_LIBUSB || '1' };
 export async function adb(args, options = {}) {
   return (await exec(adbPath, args, { env: adbEnv, timeout: 8000, maxBuffer: 12 * 1024 * 1024, ...options })).stdout;
 }
